@@ -26,6 +26,7 @@ import tachiyomi.core.util.system.ImageUtil
 import tachiyomi.core.util.system.logcat
 import tachiyomi.domain.chapter.service.ChapterRecognition
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.source.local.filter.OrderBy
 import tachiyomi.source.local.image.LocalCoverManager
 import tachiyomi.source.local.io.Archive
@@ -51,6 +52,7 @@ actual class LocalSource(
 
     private val json: Json by injectLazy()
     private val xml: XML by injectLazy()
+    private val mangaRepository: MangaRepository by injectLazy()
 
     private val POPULAR_FILTERS = FilterList(OrderBy.Popular(context))
     private val LATEST_FILTERS = FilterList(OrderBy.Latest(context))
@@ -72,16 +74,19 @@ actual class LocalSource(
 
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
         val baseDirsFiles = fileSystem.getFilesInBaseDirectories()
+        val localMangaList = runBlocking { getMangaList() }
         val lastModifiedLimit by lazy { if (filters === LATEST_FILTERS) System.currentTimeMillis() - LATEST_THRESHOLD else 0L }
         var mangaDirs = baseDirsFiles
             // Filter out files that are hidden and is not a folder
             .filter { it.isDirectory && !it.name.startsWith('.') }
             .distinctBy { it.name }
-            .filter { // Filter by query or last modified
+            .filter { dir -> // Filter by query or last modified
                 if (lastModifiedLimit == 0L) {
-                    it.name.contains(query, ignoreCase = true)
+                    dir.name.contains(query, ignoreCase = true) ||
+                        localMangaList[dir.name]?.title?.contains(query, ignoreCase = true) == true ||
+                        localMangaList[dir.name]?.genre?.contains(query) == true
                 } else {
-                    it.lastModified() >= lastModifiedLimit
+                    dir.lastModified() >= lastModifiedLimit
                 }
             }
 
@@ -144,6 +149,13 @@ actual class LocalSource(
         }
 
         return Observable.just(MangasPage(mangas.toList(), false))
+    }
+
+    private suspend fun getMangaList(): Map<String?, Manga?> {
+        return fileSystem.getFilesInBaseDirectories().toList()
+            .filter { it.isDirectory && !it.name.startsWith('.') }
+            .map { mangaRepository.getMangaByUrlAndSourceId(it.name, ID) }
+            .associateBy { it?.url }
     }
 
     // Manga details related
