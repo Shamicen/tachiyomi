@@ -108,47 +108,15 @@ actual class LocalSource(
                         ?.map { it.trim() }
                         ?.contains(query) == true ||
 
-                        query.equals(Status.ONGOING.string, ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.ONGOING.sMangaValue) == true ||
+                        Status.values().map {
+                            query.equals(it.string, ignoreCase = true) &&
+                                localMangaList[dir.name]?.status?.equals(it.sMangaValue) == true
+                        }.contains(true) ||
 
-                        query.equals("status:${Status.ONGOING.sMangaValue}", ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.ONGOING.sMangaValue) == true ||
-
-                        query.equals(Status.COMPLETED.string, ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.COMPLETED.sMangaValue) == true ||
-
-                        query.equals("status:${Status.COMPLETED.sMangaValue}", ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.COMPLETED.sMangaValue) == true ||
-
-                        query.equals(Status.LICENSED.string, ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.LICENSED.sMangaValue) == true ||
-
-                        query.equals("status:${Status.LICENSED.sMangaValue}", ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.LICENSED.sMangaValue) == true ||
-
-                        query.equals(Status.PUBLISHING_FINISHED.string, ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.PUBLISHING_FINISHED.sMangaValue) == true ||
-
-                        query.equals("status:${Status.PUBLISHING_FINISHED.sMangaValue}", ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.PUBLISHING_FINISHED.sMangaValue) == true ||
-
-                        query.equals(Status.CANCELLED.string, ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.CANCELLED.sMangaValue) == true ||
-
-                        query.equals("status:${Status.CANCELLED.sMangaValue}", ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.CANCELLED.sMangaValue) == true ||
-
-                        query.equals(Status.ON_HIATUS.string, ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.ON_HIATUS.sMangaValue) == true ||
-
-                        query.equals("status:${Status.ON_HIATUS.sMangaValue}", ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.ON_HIATUS.sMangaValue) == true ||
-
-                        query.equals(Status.UNKNOWN.string, ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.UNKNOWN.sMangaValue) == true ||
-
-                        query.equals("status:${Status.UNKNOWN.sMangaValue}", ignoreCase = true) &&
-                        localMangaList[dir.name]?.status?.equals(Status.ONGOING.sMangaValue) == true
+                        Status.values().map {
+                            query.equals("status:${it.sMangaValue}", ignoreCase = true) &&
+                                localMangaList[dir.name]?.status?.equals(it.sMangaValue) == true
+                        }.contains(true)
                 } else {
                     dir.lastModified() >= lastModifiedLimit
                 }
