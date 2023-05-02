@@ -109,13 +109,10 @@ actual class LocalSource(
                         ?.contains(query) == true ||
 
                         Status.values().map {
-                            query.equals(it.string, ignoreCase = true) &&
-                                localMangaList[dir.name]?.status?.equals(it.sMangaValue) == true
-                        }.contains(true) ||
-
-                        Status.values().map {
-                            query.equals("status:${it.sMangaValue}", ignoreCase = true) &&
-                                localMangaList[dir.name]?.status?.equals(it.sMangaValue) == true
+                            localMangaList[dir.name]?.status?.equals(it.sMangaValue) == true && (
+                                query.equals(it.string, ignoreCase = true) ||
+                                    query.equals("status:${it.sMangaValue}", ignoreCase = true)
+                                )
                         }.contains(true)
                 } else {
                     dir.lastModified() >= lastModifiedLimit
