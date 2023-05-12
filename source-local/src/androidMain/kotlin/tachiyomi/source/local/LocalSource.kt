@@ -40,6 +40,7 @@ import java.io.FileInputStream
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipFile
+import kotlin.streams.toList
 import kotlin.time.Duration.Companion.days
 import com.github.junrar.Archive as JunrarArchive
 import tachiyomi.domain.source.model.Source as DomainSource
@@ -143,8 +144,8 @@ actual class LocalSource(
         }
 
         // Transform mangaDirs to list of SManga
-        val mangas = mangaDirs.map { mangaDir ->
-            SManga.create().apply {
+        val mangas = mangaDirs.toList().parallelStream().map { mangaDir ->
+            SManga.create().apply manga@{
                 title = mangaDir.name
                 url = mangaDir.name
 
@@ -152,31 +153,30 @@ actual class LocalSource(
                 coverManager.find(mangaDir.name)
                     ?.takeIf(File::exists)
                     ?.let { thumbnail_url = it.absolutePath }
-            }
-        }
 
-        // Fetch chapters of all the manga
-        mangas.forEach { manga ->
-            runBlocking {
-                val chapters = getChapterList(manga)
-                if (chapters.isNotEmpty()) {
-                    val chapter = chapters.last()
-                    val format = getFormat(chapter)
+                // Fetch chapters and fill metadata
+                runBlocking {
+                    val chapters = getChapterList(this@manga)
+                    if (chapters.isNotEmpty()) {
+                        val chapter = chapters.last()
 
-                    if (format is Format.Epub) {
-                        EpubFile(format.file).use { epub ->
-                            epub.fillMangaMetadata(manga)
+                        when (val format = getFormat(chapter)) {
+                            is Format.Directory -> getMangaDetails(this@manga)
+                            is Format.Zip -> getMangaDetails(this@manga)
+                            is Format.Rar -> getMangaDetails(this@manga)
+                            is Format.Epub -> EpubFile(format.file).use { epub ->
+                                epub.fillMangaMetadata(this@manga)
+                            }
                         }
-                    }
 
-                    // Copy the cover from the first chapter found if not available
-                    if (manga.thumbnail_url == null) {
-                        updateCover(chapter, manga)
+                        // Copy the cover from the first chapter found if not available
+                        if (this@manga.thumbnail_url == null) {
+                            updateCover(chapter, this@manga)
+                        }
                     }
                 }
             }
         }
-
         return Observable.just(MangasPage(mangas.toList(), false))
     }
 
