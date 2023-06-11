@@ -27,6 +27,7 @@ fun SManga.getComicInfo() = ComicInfo(
     coverArtist = null,
     tags = null,
 )
+
 fun SManga.copyFromComicInfo(comicInfo: ComicInfo) {
     comicInfo.series?.let { title = it.value }
     comicInfo.writer?.let { author = it.value }
