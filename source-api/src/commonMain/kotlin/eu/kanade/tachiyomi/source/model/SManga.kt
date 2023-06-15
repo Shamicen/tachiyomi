@@ -20,6 +20,8 @@ interface SManga : Serializable {
 
     var thumbnail_url: String?
 
+    var lastModified: Long?
+
     var update_strategy: UpdateStrategy
 
     var initialized: Boolean
@@ -70,6 +72,18 @@ interface SManga : Serializable {
         it.thumbnail_url = thumbnail_url
         it.update_strategy = update_strategy
         it.initialized = initialized
+    }
+
+    fun getStatusString(): String {
+        return when (this.status) {
+            1 -> "Ongoing"
+            2 -> "Completed"
+            3 -> "Licensed"
+            4 -> "Publishing finished"
+            5 -> "Cancelled"
+            6 -> "On hiatus"
+            else -> "Unknown"
+        }
     }
 
     companion object {

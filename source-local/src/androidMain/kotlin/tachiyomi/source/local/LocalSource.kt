@@ -4,6 +4,7 @@ import android.content.Context
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.UnmeteredSource
+import eu.kanade.tachiyomi.source.model.Filter
 import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -55,6 +56,8 @@ actual class LocalSource(
     private val xml: XML by injectLazy()
     private val mangaRepository: MangaRepository by injectLazy()
 
+    private lateinit var localManga: List<SManga>
+
     private val POPULAR_FILTERS = FilterList(OrderBy.Popular(context))
     private val LATEST_FILTERS = FilterList(OrderBy.Latest(context))
 
@@ -68,86 +71,24 @@ actual class LocalSource(
 
     override val supportsLatest: Boolean = true
 
-    // Browse related
-    override fun fetchPopularManga(page: Int) = fetchSearchManga(page, "", POPULAR_FILTERS)
-
-    override fun fetchLatestUpdates(page: Int) = fetchSearchManga(page, "", LATEST_FILTERS)
-
-    enum class Status(
-        val string: String,
-        val sMangaValue: Long,
-    ) {
-        ONGOING("Ongoing", SManga.ONGOING.toLong()),
-        COMPLETED("Completed", SManga.COMPLETED.toLong()),
-        LICENSED("Licensed", SManga.LICENSED.toLong()),
-        PUBLISHING_FINISHED("Publishing finished", SManga.PUBLISHING_FINISHED.toLong()),
-        CANCELLED("Cancelled", SManga.CANCELLED.toLong()),
-        ON_HIATUS("On hiatus", SManga.ON_HIATUS.toLong()),
-        UNKNOWN("Unknown", SManga.UNKNOWN.toLong()),
-    }
-    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
-        val baseDirsFiles = fileSystem.getFilesInBaseDirectories()
-        val localMangaList = runBlocking { getMangaList() }
-        val lastModifiedLimit by lazy { if (filters === LATEST_FILTERS) System.currentTimeMillis() - LATEST_THRESHOLD else 0L }
-        var mangaDirs = baseDirsFiles
+    private fun getAllManga(): List<SManga> {
+        val mangaDirs = fileSystem.getFilesInBaseDirectories()
             // Filter out files that are hidden and is not a folder
             .filter { it.isDirectory && !it.name.startsWith('.') }
             .distinctBy { it.name }
-            .filter { dir -> // Filter by query or last modified
-                if (lastModifiedLimit == 0L) {
-                    dir.name.contains(query, ignoreCase = true) ||
-                        localMangaList[dir.name]?.title?.contains(query, ignoreCase = true) == true ||
-                        localMangaList[dir.name]?.genre?.contains(query) == true ||
 
-                        localMangaList[dir.name]?.author
-                        ?.split(",")
-                        ?.map { it.trim() }
-                        ?.contains(query) == true ||
-
-                        localMangaList[dir.name]?.artist
-                        ?.split(",")
-                        ?.map { it.trim() }
-                        ?.contains(query) == true ||
-
-                        Status.values().map {
-                            localMangaList[dir.name]?.status?.equals(it.sMangaValue) == true && (
-                                query.equals(it.string, ignoreCase = true) ||
-                                    query.equals("status:${it.sMangaValue}", ignoreCase = true)
-                                )
-                        }.contains(true)
-                } else {
-                    dir.lastModified() >= lastModifiedLimit
-                }
-            }
-
-        filters.forEach { filter ->
-            when (filter) {
-                is OrderBy.Popular -> {
-                    mangaDirs = if (filter.state!!.ascending) {
-                        mangaDirs.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-                    } else {
-                        mangaDirs.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.name })
-                    }
-                }
-                is OrderBy.Latest -> {
-                    mangaDirs = if (filter.state!!.ascending) {
-                        mangaDirs.sortedBy(File::lastModified)
-                    } else {
-                        mangaDirs.sortedByDescending(File::lastModified)
-                    }
-                }
-
-                else -> {
-                    /* Do nothing */
-                }
-            }
-        }
-
-        // Transform mangaDirs to list of SManga
-        val mangas = mangaDirs.toList().parallelStream().map { mangaDir ->
+        return mangaDirs.toList().parallelStream().map { mangaDir ->
             SManga.create().apply manga@{
-                title = mangaDir.name
                 url = mangaDir.name
+                lastModified = mangaDir.lastModified()
+
+                val localMangaList = runBlocking { getMangaList() }
+                title = localMangaList[url]?.title ?: mangaDir.name
+                author = localMangaList[url]?.author
+                artist = localMangaList[url]?.artist
+                description = localMangaList[url]?.description
+                genre = localMangaList[url]?.genre?.joinToString(", ") { it.trim() }
+                status = localMangaList[url]?.status?.toInt() ?: getStatusIntFromString("Unknown")
 
                 // Try to find the cover
                 coverManager.find(mangaDir.name)
@@ -160,12 +101,21 @@ actual class LocalSource(
                     if (chapters.isNotEmpty()) {
                         val chapter = chapters.last()
 
-                        when (val format = getFormat(chapter)) {
-                            is Format.Directory -> getMangaDetails(this@manga)
-                            is Format.Zip -> getMangaDetails(this@manga)
-                            is Format.Rar -> getMangaDetails(this@manga)
-                            is Format.Epub -> EpubFile(format.file).use { epub ->
-                                epub.fillMangaMetadata(this@manga)
+                        // only read metadata from disk if no optional field has metadata in the database yet
+                        if (
+                            author.isNullOrBlank() &&
+                            artist.isNullOrBlank() &&
+                            description.isNullOrBlank() &&
+                            genre.isNullOrBlank() &&
+                            status == getStatusIntFromString("Unknown")
+                        ) {
+                            when (val format = getFormat(chapter)) {
+                                is Format.Directory -> getMangaDetails(this@manga)
+                                is Format.Zip -> getMangaDetails(this@manga)
+                                is Format.Rar -> getMangaDetails(this@manga)
+                                is Format.Epub -> EpubFile(format.file).use { epub ->
+                                    epub.fillMangaMetadata(this@manga)
+                                }
                             }
                         }
 
@@ -176,8 +126,250 @@ actual class LocalSource(
                     }
                 }
             }
+        }.toList()
+    }
+
+    // Browse related
+    override fun fetchPopularManga(page: Int) = fetchSearchManga(page, "", POPULAR_FILTERS)
+
+    override fun fetchLatestUpdates(page: Int) = fetchSearchManga(page, "", LATEST_FILTERS)
+    enum class OrderByPopular {
+        NOT_SET,
+        POPULAR_ASCENDING,
+        POPULAR_DESCENDING,
+    }
+    enum class OrderByLatest {
+        NOT_SET,
+        LATEST,
+        OLDEST,
+    }
+    override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
+        if (!this::localManga.isInitialized) localManga = getAllManga()
+        var includedManga: MutableList<SManga>
+
+        val lastModifiedLimit by lazy { if (filters === LATEST_FILTERS) System.currentTimeMillis() - LATEST_THRESHOLD else 0L }
+        val searchManga = localManga
+            .filter { manga -> // Filter by query or last modified
+                if (lastModifiedLimit == 0L) {
+                    manga.title.contains(query, ignoreCase = true) ||
+                        File(manga.url).name.contains(query, ignoreCase = true)
+                } else {
+                    File(manga.url).lastModified() >= lastModifiedLimit
+                }
+            }
+
+        var orderByPopular = OrderByPopular.NOT_SET
+        var orderByLatest = OrderByLatest.NOT_SET
+
+        val includedGenres = mutableListOf<String>()
+        val includedAuthors = mutableListOf<String>()
+        val includedArtists = mutableListOf<String>()
+        val includedStatuses = mutableListOf<String>()
+
+        filters.forEach { filter ->
+            when (filter) {
+                is OrderBy.Popular -> {
+                    orderByPopular = if (filter.state!!.ascending) {
+                        OrderByPopular.POPULAR_ASCENDING
+                    } else {
+                        OrderByPopular.POPULAR_DESCENDING
+                    }
+                }
+
+                is OrderBy.Latest -> {
+                    orderByLatest = if (filter.state!!.ascending) {
+                        OrderByLatest.LATEST
+                    } else {
+                        OrderByLatest.OLDEST
+                    }
+                }
+
+                // included Filter
+                is GenreGroup -> {
+                    filter.state.forEach { genre ->
+                        when (genre.state) {
+                            Filter.TriState.STATE_INCLUDE -> {
+                                includedGenres.add(genre.name)
+                            }
+                        }
+                    }
+                }
+                is AuthorGroup -> {
+                    filter.state.forEach { author ->
+                        when (author.state) {
+                            Filter.TriState.STATE_INCLUDE -> {
+                                includedAuthors.add(author.name)
+                            }
+                        }
+                    }
+                }
+                is ArtistGroup -> {
+                    filter.state.forEach { artist ->
+                        when (artist.state) {
+                            Filter.TriState.STATE_INCLUDE -> {
+                                includedArtists.add(artist.name)
+                            }
+                        }
+                    }
+                }
+                is StatusGroup -> {
+                    filter.state.forEach { status ->
+                        when (status.state) {
+                            Filter.TriState.STATE_INCLUDE -> {
+                                includedStatuses.add(status.name)
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    /* Do nothing */
+                }
+            }
         }
-        return Observable.just(MangasPage(mangas.toList(), false))
+
+        includedManga = searchManga.filter { manga ->
+            (
+                if (includedGenres.isNotEmpty()) {
+                    manga.genre?.split(",")?.map { it.trim() }
+                        ?.let { areAllElementsCommon(it, includedGenres) } ?: false
+                } else {
+                    true
+                }
+                ) && (
+                if (includedAuthors.isNotEmpty()) {
+                    manga.author?.split(",")?.map { it.trim() }
+                        ?.let { areAllElementsCommon(it, includedAuthors) } ?: false
+                } else {
+                    true
+                }
+                ) && (
+                if (includedArtists.isNotEmpty()) {
+                    manga.artist?.split(",")?.map { it.trim() }
+                        ?.let { areAllElementsCommon(it, includedArtists) } ?: false
+                } else {
+                    true
+                }
+                ) && (
+                if (includedStatuses.isNotEmpty()) {
+                    includedStatuses.map { getStatusIntFromString(it) }.contains(manga.status)
+                } else {
+                    true
+                }
+                )
+        }.toMutableList()
+
+        if (
+            includedGenres.isEmpty() &&
+            includedAuthors.isEmpty() &&
+            includedArtists.isEmpty() &&
+            includedStatuses.isEmpty()
+        ) {
+            includedManga = searchManga.toMutableList()
+        }
+
+        when (orderByPopular) {
+            OrderByPopular.POPULAR_ASCENDING ->
+                includedManga =
+                    includedManga.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                        .toMutableList()
+
+            OrderByPopular.POPULAR_DESCENDING ->
+                includedManga =
+                    includedManga.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
+                        .toMutableList()
+
+            OrderByPopular.NOT_SET -> Unit
+        }
+
+        when (orderByLatest) {
+            OrderByLatest.LATEST ->
+                includedManga =
+                    includedManga.sortedBy { it.lastModified }
+                        .toMutableList()
+
+            OrderByLatest.OLDEST ->
+                includedManga =
+                    includedManga.sortedByDescending { it.lastModified }
+                        .toMutableList()
+
+            OrderByLatest.NOT_SET -> Unit
+        }
+
+        filters.forEach { filter ->
+            when (filter) {
+                // excluded Filter
+                is GenreGroup -> {
+                    filter.state.forEach { genre ->
+                        when (genre.state) {
+                            Filter.TriState.STATE_EXCLUDE -> {
+                                includedManga.removeIf { manga ->
+                                    manga.genre?.split(",")?.map { it.trim() }?.contains(genre.name) ?: false
+                                }
+                            }
+                        }
+                    }
+                }
+                is AuthorGroup -> {
+                    filter.state.forEach { author ->
+                        when (author.state) {
+                            Filter.TriState.STATE_EXCLUDE -> {
+                                includedManga.removeIf { manga ->
+                                    manga.author?.split(",")?.map { it.trim() }?.contains(author.name) ?: false
+                                }
+                            }
+                        }
+                    }
+                }
+                is ArtistGroup -> {
+                    filter.state.forEach { artist ->
+                        when (artist.state) {
+                            Filter.TriState.STATE_EXCLUDE -> {
+                                includedManga.removeIf { manga ->
+                                    manga.artist?.split(",")?.map { it.trim() }?.contains(artist.name) ?: false
+                                }
+                            }
+                        }
+                    }
+                }
+                is StatusGroup -> {
+                    filter.state.forEach { status ->
+                        when (status.state) {
+                            Filter.TriState.STATE_EXCLUDE -> {
+                                includedManga.removeIf { manga ->
+                                    manga.getStatusString() == status.name
+                                }
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    /* Do nothing */
+                }
+            }
+        }
+        return Observable.just(MangasPage(includedManga.toList(), false))
+    }
+
+    private fun areAllElementsCommon(
+        ListToMatch: List<String>,
+        subListToMatch: List<String>,
+    ): Boolean {
+        return subListToMatch.all { it in ListToMatch.toSet() }
+    }
+
+    private fun getStatusIntFromString(statusString: String): Int {
+        return when (statusString) {
+            "Unknown" -> 0
+            "Ongoing" -> 1
+            "Completed" -> 2
+            "Licensed" -> 3
+            "Publishing finished" -> 4
+            "Cancelled" -> 5
+            "On hiatus" -> 6
+            else -> 0
+        }
     }
 
     private suspend fun getMangaList(): Map<String?, Manga?> {
@@ -323,7 +515,51 @@ actual class LocalSource(
     }
 
     // Filters
-    override fun getFilterList() = FilterList(OrderBy.Popular(context))
+    private class GenreFilter(genre: String) : Filter.TriState(genre)
+    private class GenreGroup(genres: List<GenreFilter>) : Filter.Group<GenreFilter>("Genres", genres)
+    private class AuthorFilter(author: String) : Filter.TriState(author)
+    private class AuthorGroup(authors: List<AuthorFilter>) : Filter.Group<AuthorFilter>("Authors", authors)
+    private class ArtistFilter(genre: String) : Filter.TriState(genre)
+    private class ArtistGroup(genres: List<ArtistFilter>) : Filter.Group<ArtistFilter>("Artists", genres)
+    private class StatusFilter(name: String) : Filter.TriState(name)
+    private class StatusGroup(filters: List<StatusFilter>) : Filter.Group<StatusFilter>("Status", filters)
+
+    override fun getFilterList(): FilterList {
+        if (!this::localManga.isInitialized) localManga = getAllManga()
+
+        val genres = localManga.mapNotNull { it.genre?.split(",") }
+            .flatMap { it.map { genre -> genre.trim() } }.toSet()
+
+        val authors = localManga.mapNotNull { it.author?.split(",") }
+            .flatMap { it.map { author -> author.trim() } }.toSet()
+
+        val artists = localManga.mapNotNull { it.artist?.split(",") }
+            .flatMap { it.map { artist -> artist.trim() } }.toSet()
+
+        val filters = try {
+            mutableListOf<Filter<*>>(
+                OrderBy.Popular(context),
+                GenreGroup(genres.map { GenreFilter(it) }),
+                AuthorGroup(authors.map { AuthorFilter(it) }),
+                ArtistGroup(artists.map { ArtistFilter(it) }),
+                StatusGroup(
+                    listOf(
+                        "Ongoing",
+                        "Completed",
+                        "Licensed",
+                        "Publishing finished",
+                        "Cancelled",
+                        "On hiatus",
+                        "Unknown",
+                    ).map { StatusFilter(it) },
+                ),
+            )
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e)
+            emptyList()
+        }
+        return FilterList(filters)
+    }
 
     // Unused stuff
     override suspend fun getPageList(chapter: SChapter) = throw UnsupportedOperationException("Unused")
