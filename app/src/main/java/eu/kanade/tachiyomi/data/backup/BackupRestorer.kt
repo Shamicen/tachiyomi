@@ -73,7 +73,6 @@ class BackupRestorer(
         return File("")
     }
 
-    @Suppress("BlockingMethodInNonBlockingContext")
     private suspend fun performRestore(uri: Uri): Boolean {
         val backup = BackupUtil.decodeBackup(context, uri)
 
@@ -125,9 +124,9 @@ class BackupRestorer(
             } else {
                 // Manga in database
                 // Copy information from manga already in database
-                val manga = backupManager.restoreExistingManga(manga, dbManga)
+                val updatedManga = backupManager.restoreExistingManga(manga, dbManga)
                 // Fetch rest of manga information
-                restoreNewManga(manga, chapters, categories, history, tracks, backupCategories)
+                restoreNewManga(updatedManga, chapters, categories, history, tracks, backupCategories)
             }
         } catch (e: Exception) {
             val sourceName = sourceMapping[manga.source] ?: manga.source.toString()

@@ -70,7 +70,7 @@
     <string name="pref_category_tracking">İzleme</string>
     <string name="pref_category_advanced">Gelişmiş</string>
     <string name="pref_category_about">Üzerine</string>
-    <string name="pref_library_columns">Dize başına öge</string>
+    <string name="pref_library_columns">Izgara boyutu</string>
     <string name="portrait">Dikey</string>
     <string name="landscape">Yatay</string>
     <string name="pref_library_update_interval">Kendiliğinden güncellemeler</string>
@@ -355,7 +355,6 @@
         <item quantity="other">%d girdi için</item>
     </plurals>
     <string name="action_menu">Komut-Seçenek Dizelgesi</string>
-    <string name="action_reorganize_by">Yeniden sırala</string>
     <string name="action_newest">En yeni</string>
     <string name="action_oldest">En eski</string>
     <string name="action_move_to_top">En üste taşı</string>
@@ -389,7 +388,6 @@
     <string name="website">Web sitesi</string>
     <string name="information_webview_required">WebView, Tachiyomi için gereklidir</string>
     <string name="licenses">Açık kaynak lisansları</string>
-    <string name="pref_confirm_exit">Çıkışı doğrula</string>
     <string name="confirm_exit">Çıkmak için yeniden geriye basın</string>
     <string name="label_downloaded_only">Yalnızca indirilen</string>
     <string name="recent_manga_time">Böl. %1$s - %2$s</string>
@@ -651,7 +649,7 @@
     <string name="skipped_reason_completed">Manga bitirildiği için atlandı</string>
     <string name="skipped_reason_not_caught_up">Okunmamış bölümler olduğu için atlandı</string>
     <string name="skipped_reason_not_started">Hiçbir bölüm okunmadığı için atlandı</string>
-    <string name="pref_navigate_pan">Dokunulduğunda geniş görselleri kaydır</string>
+    <string name="pref_navigate_pan">Geniş görüntüleri kaydır</string>
     <string name="pref_landscape_zoom">Yatay görseli yakınlaştır</string>
     <string name="notification_update_error">%1$d güncelleme başarısız oldu</string>
     <string name="notification_update_skipped">%1$d güncelleme atlandı</string>
@@ -802,4 +800,5 @@
     <string name="pref_chapter_swipe_end">Sağa kaydırma eylemi</string>
     <string name="pref_chapter_swipe_start">Sola kaydırma eylemi</string>
     <string name="pref_double_tap_zoom">Yakınlaştırmak için iki kez dokun</string>
+    <string name="pref_library_columns_per_row">Satır başına %d</string>
 </resources>

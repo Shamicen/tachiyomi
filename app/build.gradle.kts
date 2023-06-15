@@ -180,7 +180,6 @@ dependencies {
     implementation(androidx.appcompat)
     implementation(androidx.biometricktx)
     implementation(androidx.constraintlayout)
-    implementation(androidx.coordinatorlayout)
     implementation(androidx.corektx)
     implementation(androidx.splashscreen)
     implementation(androidx.recyclerview)
@@ -219,6 +218,7 @@ dependencies {
     implementation(libs.injekt.core)
 
     // Image loading
+    implementation(platform(libs.coil.bom))
     implementation(libs.bundles.coil)
     implementation(libs.subsamplingscaleimageview) {
         exclude(module = "image-decoder")
@@ -228,7 +228,6 @@ dependencies {
     // UI libraries
     implementation(libs.material)
     implementation(libs.flexible.adapter.core)
-    implementation(libs.flexible.adapter.ui)
     implementation(libs.photoview)
     implementation(libs.directionalviewpager) {
         exclude(group = "androidx.viewpager", module = "viewpager")
@@ -237,7 +236,6 @@ dependencies {
     implementation(libs.bundles.richtext)
     implementation(libs.aboutLibraries.compose)
     implementation(libs.bundles.voyager)
-    implementation(libs.compose.cascade)
     implementation(libs.compose.materialmotion)
     implementation(libs.compose.simpleicons)
 
@@ -282,8 +280,6 @@ tasks {
     withType<KotlinCompile> {
         kotlinOptions.freeCompilerArgs += listOf(
             "-Xcontext-receivers",
-            "-opt-in=coil.annotation.ExperimentalCoilApi",
-            "-opt-in=com.google.accompanist.permissions.ExperimentalPermissionsApi",
             "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
             "-opt-in=androidx.compose.material.ExperimentalMaterialApi",
             "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
@@ -292,6 +288,8 @@ tasks {
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
             "-opt-in=androidx.compose.animation.ExperimentalAnimationApi",
             "-opt-in=androidx.compose.animation.graphics.ExperimentalAnimationGraphicsApi",
+            "-opt-in=coil.annotation.ExperimentalCoilApi",
+            "-opt-in=com.google.accompanist.permissions.ExperimentalPermissionsApi",
             "-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi",
             "-opt-in=kotlinx.coroutines.FlowPreview",
             "-opt-in=kotlinx.coroutines.InternalCoroutinesApi",

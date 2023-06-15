@@ -9,9 +9,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -32,7 +30,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
@@ -66,7 +63,6 @@ import eu.kanade.presentation.util.collectAsState
 import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.Migrations
 import eu.kanade.tachiyomi.R
-import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
@@ -81,10 +77,8 @@ import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
 import eu.kanade.tachiyomi.util.system.openInBrowser
-import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -101,7 +95,6 @@ import tachiyomi.presentation.core.components.material.Scaffold
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import kotlin.time.Duration.Companion.seconds
 import androidx.compose.ui.graphics.Color.Companion as ComposeColor
 
 class MainActivity : BaseActivity() {
@@ -111,7 +104,6 @@ class MainActivity : BaseActivity() {
     private val uiPreferences: UiPreferences by injectLazy()
     private val preferences: BasePreferences by injectLazy()
 
-    private val chapterCache: ChapterCache by injectLazy()
     private val downloadCache: DownloadCache by injectLazy()
 
     // To be checked by splash screen. If true then splash screen will be removed.
@@ -194,10 +186,6 @@ class MainActivity : BaseActivity() {
                 screen = HomeScreen,
                 disposeBehavior = NavigatorDisposeBehavior(disposeNestedNavigators = false, disposeSteps = true),
             ) { navigator ->
-                if (navigator.size == 1) {
-                    ConfirmExit()
-                }
-
                 LaunchedEffect(navigator) {
                     this@MainActivity.navigator = navigator
 
@@ -286,22 +274,6 @@ class MainActivity : BaseActivity() {
         when (val screen = navigator?.lastItem) {
             is AssistContentScreen -> {
                 screen.onProvideAssistUrl()?.let { outContent.webUri = it.toUri() }
-            }
-        }
-    }
-
-    @Composable
-    private fun ConfirmExit() {
-        val scope = rememberCoroutineScope()
-        val confirmExit by preferences.confirmExit().collectAsState()
-        var waitingConfirmation by remember { mutableStateOf(false) }
-        BackHandler(enabled = !waitingConfirmation && confirmExit) {
-            scope.launch {
-                waitingConfirmation = true
-                val toast = toast(R.string.confirm_exit, Toast.LENGTH_LONG)
-                delay(2.seconds)
-                toast.cancel()
-                waitingConfirmation = false
             }
         }
     }
@@ -423,7 +395,7 @@ class MainActivity : BaseActivity() {
 
                 // Get the search query provided in extras, and if not null, perform a global search with it.
                 val query = intent.getStringExtra(SearchManager.QUERY) ?: intent.getStringExtra(Intent.EXTRA_TEXT)
-                if (query != null && query.isNotEmpty()) {
+                if (!query.isNullOrEmpty()) {
                     navigator.popUntilRoot()
                     navigator.push(GlobalSearchScreen(query))
                 }
@@ -431,7 +403,7 @@ class MainActivity : BaseActivity() {
             }
             INTENT_SEARCH -> {
                 val query = intent.getStringExtra(INTENT_SEARCH_QUERY)
-                if (query != null && query.isNotEmpty()) {
+                if (!query.isNullOrEmpty()) {
                     val filter = intent.getStringExtra(INTENT_SEARCH_FILTER) ?: ""
                     navigator.popUntilRoot()
                     navigator.push(GlobalSearchScreen(query, filter))
@@ -447,16 +419,6 @@ class MainActivity : BaseActivity() {
 
         ready = true
         return true
-    }
-
-    override fun onBackPressed() {
-        if (navigator?.size == 1 &&
-            !onBackPressedDispatcher.hasEnabledCallbacks() &&
-            libraryPreferences.autoClearChapterCache().get()
-        ) {
-            chapterCache.clear()
-        }
-        super.onBackPressed()
     }
 
     init {

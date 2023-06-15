@@ -1,6 +1,5 @@
 package eu.kanade.presentation.manga.components
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -9,7 +8,6 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.SelectAll
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -19,15 +17,18 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.DownloadDropdownMenu
-import eu.kanade.presentation.components.OverflowMenu
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.tachiyomi.R
 import tachiyomi.presentation.core.theme.active
@@ -74,78 +75,83 @@ fun MangaToolbar(
             },
             actions = {
                 if (isActionMode) {
-                    IconButton(onClick = onSelectAll) {
-                        Icon(
-                            imageVector = Icons.Outlined.SelectAll,
-                            contentDescription = stringResource(R.string.action_select_all),
-                        )
-                    }
-                    IconButton(onClick = onInvertSelection) {
-                        Icon(
-                            imageVector = Icons.Outlined.FlipToBack,
-                            contentDescription = stringResource(R.string.action_select_inverse),
-                        )
-                    }
+                    AppBarActions(
+                        listOf(
+                            AppBar.Action(
+                                title = stringResource(R.string.action_select_all),
+                                icon = Icons.Outlined.SelectAll,
+                                onClick = onSelectAll,
+                            ),
+                            AppBar.Action(
+                                title = stringResource(R.string.action_select_inverse),
+                                icon = Icons.Outlined.FlipToBack,
+                                onClick = onInvertSelection,
+                            ),
+                        ),
+                    )
                 } else {
+                    var downloadExpanded by remember { mutableStateOf(false) }
                     if (onClickDownload != null) {
-                        val (downloadExpanded, onDownloadExpanded) = remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { onDownloadExpanded(!downloadExpanded) }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Download,
-                                    contentDescription = stringResource(R.string.manga_download),
-                                )
-                            }
-                            val onDismissRequest = { onDownloadExpanded(false) }
-                            DownloadDropdownMenu(
-                                expanded = downloadExpanded,
-                                onDismissRequest = onDismissRequest,
-                                onDownloadClicked = onClickDownload,
-                            )
-                        }
+                        val onDismissRequest = { downloadExpanded = false }
+                        DownloadDropdownMenu(
+                            expanded = downloadExpanded,
+                            onDismissRequest = onDismissRequest,
+                            onDownloadClicked = onClickDownload,
+                        )
                     }
 
                     val filterTint = if (hasFilters) MaterialTheme.colorScheme.active else LocalContentColor.current
-                    IconButton(onClick = onClickFilter) {
-                        Icon(Icons.Outlined.FilterList, contentDescription = stringResource(R.string.action_filter), tint = filterTint)
-                    }
-
-                    OverflowMenu { closeMenu ->
-                        DropdownMenuItem(
-                            text = { Text(text = stringResource(R.string.action_webview_refresh)) },
-                            onClick = {
-                                onClickRefresh()
-                                closeMenu()
-                            },
-                        )
-                        if (onClickEditCategory != null) {
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(R.string.action_edit_categories)) },
-                                onClick = {
-                                    onClickEditCategory()
-                                    closeMenu()
-                                },
+                    AppBarActions(
+                        actions = buildList {
+                            if (onClickDownload != null) {
+                                add(
+                                    AppBar.Action(
+                                        title = stringResource(R.string.manga_download),
+                                        icon = Icons.Outlined.Download,
+                                        onClick = { downloadExpanded = !downloadExpanded },
+                                    ),
+                                )
+                            }
+                            add(
+                                AppBar.Action(
+                                    title = stringResource(R.string.action_filter),
+                                    icon = Icons.Outlined.FilterList,
+                                    iconTint = filterTint,
+                                    onClick = onClickFilter,
+                                ),
                             )
-                        }
-                        if (onClickMigrate != null) {
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(R.string.action_migrate)) },
-                                onClick = {
-                                    onClickMigrate()
-                                    closeMenu()
-                                },
+                            add(
+                                AppBar.OverflowAction(
+                                    title = stringResource(R.string.action_webview_refresh),
+                                    onClick = onClickRefresh,
+                                ),
                             )
-                        }
-                        if (onClickShare != null) {
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(R.string.action_share)) },
-                                onClick = {
-                                    onClickShare()
-                                    closeMenu()
-                                },
-                            )
-                        }
-                    }
+                            if (onClickEditCategory != null) {
+                                add(
+                                    AppBar.OverflowAction(
+                                        title = stringResource(R.string.action_edit_categories),
+                                        onClick = onClickEditCategory,
+                                    ),
+                                )
+                            }
+                            if (onClickMigrate != null) {
+                                add(
+                                    AppBar.OverflowAction(
+                                        title = stringResource(R.string.action_migrate),
+                                        onClick = onClickMigrate,
+                                    ),
+                                )
+                            }
+                            if (onClickShare != null) {
+                                add(
+                                    AppBar.OverflowAction(
+                                        title = stringResource(R.string.action_share),
+                                        onClick = onClickShare,
+                                    ),
+                                )
+                            }
+                        },
+                    )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(

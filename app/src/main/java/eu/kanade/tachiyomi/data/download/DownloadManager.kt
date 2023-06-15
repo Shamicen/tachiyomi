@@ -214,19 +214,21 @@ class DownloadManager(
      * @param source the source of the chapters.
      */
     fun deleteChapters(chapters: List<Chapter>, manga: Manga, source: Source) {
-        val filteredChapters = getChaptersToDelete(chapters, manga)
-        if (filteredChapters.isNotEmpty()) {
-            launchIO {
-                removeFromDownloadQueue(filteredChapters)
+        launchIO {
+            val filteredChapters = getChaptersToDelete(chapters, manga)
+            if (filteredChapters.isEmpty()) {
+                return@launchIO
+            }
 
-                val (mangaDir, chapterDirs) = provider.findChapterDirs(filteredChapters, manga, source)
-                chapterDirs.forEach { it.delete() }
-                cache.removeChapters(filteredChapters, manga)
+            removeFromDownloadQueue(filteredChapters)
 
-                // Delete manga directory if empty
-                if (mangaDir?.listFiles()?.isEmpty() == true) {
-                    deleteManga(manga, source, removeQueued = false)
-                }
+            val (mangaDir, chapterDirs) = provider.findChapterDirs(filteredChapters, manga, source)
+            chapterDirs.forEach { it.delete() }
+            cache.removeChapters(filteredChapters, manga)
+
+            // Delete manga directory if empty
+            if (mangaDir?.listFiles()?.isEmpty() == true) {
+                deleteManga(manga, source, removeQueued = false)
             }
         }
     }
@@ -278,7 +280,7 @@ class DownloadManager(
      * @param chapters the list of chapters to delete.
      * @param manga the manga of the chapters.
      */
-    fun enqueueChaptersToDelete(chapters: List<Chapter>, manga: Manga) {
+    suspend fun enqueueChaptersToDelete(chapters: List<Chapter>, manga: Manga) {
         pendingDeleter.addChapters(getChaptersToDelete(chapters, manga), manga)
     }
 
@@ -303,9 +305,11 @@ class DownloadManager(
         val oldFolder = provider.findSourceDir(oldSource) ?: return
         val newName = provider.getSourceDirName(newSource)
 
+        if (oldFolder.name == newName) return
+
         val capitalizationChanged = oldFolder.name.equals(newName, ignoreCase = true)
         if (capitalizationChanged) {
-            val tempName = newName + "_tmp"
+            val tempName = newName + Downloader.TMP_DIR_SUFFIX
             if (oldFolder.renameTo(tempName).not()) {
                 logcat(LogPriority.ERROR) { "Failed to rename source download folder: ${oldFolder.name}" }
                 return
@@ -339,6 +343,8 @@ class DownloadManager(
             newName += ".cbz"
         }
 
+        if (oldDownload.name == newName) return
+
         if (oldDownload.renameTo(newName)) {
             cache.removeChapter(oldChapter, manga)
             cache.addChapter(newName, mangaDir, manga)
@@ -347,21 +353,23 @@ class DownloadManager(
         }
     }
 
-    private fun getChaptersToDelete(chapters: List<Chapter>, manga: Manga): List<Chapter> {
+    private suspend fun getChaptersToDelete(chapters: List<Chapter>, manga: Manga): List<Chapter> {
         // Retrieve the categories that are set to exclude from being deleted on read
         val categoriesToExclude = downloadPreferences.removeExcludeCategories().get().map(String::toLong)
 
-        val categoriesForManga = runBlocking { getCategories.await(manga.id) }
+        val categoriesForManga = getCategories.await(manga.id)
             .map { it.id }
-            .takeUnless { it.isEmpty() }
-            ?: listOf(0)
-
-        return if (categoriesForManga.intersect(categoriesToExclude).isNotEmpty()) {
+            .ifEmpty { listOf(0) }
+        val filteredCategoryManga = if (categoriesForManga.intersect(categoriesToExclude).isNotEmpty()) {
             chapters.filterNot { it.read }
-        } else if (!downloadPreferences.removeBookmarkedChapters().get()) {
-            chapters.filterNot { it.bookmark }
         } else {
             chapters
+        }
+
+        return if (!downloadPreferences.removeBookmarkedChapters().get()) {
+            filteredCategoryManga.filterNot { it.bookmark }
+        } else {
+            filteredCategoryManga
         }
     }
 

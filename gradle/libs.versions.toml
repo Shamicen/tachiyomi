@@ -1,12 +1,11 @@
 [versions]
-aboutlib_version = "10.6.2"
+aboutlib_version = "10.7.0"
 okhttp_version = "5.0.0-alpha.11"
-coil_version = "2.3.0"
 shizuku_version = "12.2.0"
 sqlite = "2.3.1"
 sqldelight = "1.5.5"
-leakcanary = "2.10"
-voyager = "1.0.0-rc07"
+leakcanary = "2.11"
+voyager = "1.0.0-rc06"
 richtext = "0.16.0"
 
 [libraries]
@@ -16,7 +15,6 @@ google-services-gradle = "com.google.gms:google-services:4.3.15"
 
 rxandroid = "io.reactivex:rxandroid:1.2.1"
 rxjava = "io.reactivex:rxjava:1.3.8"
-rxrelay = "com.jakewharton.rxrelay:rxrelay:1.2.0"
 flowreactivenetwork = "ru.beryukhov:flowreactivenetwork:1.0.4"
 
 okhttp-core = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp_version" }
@@ -36,15 +34,16 @@ junrar = "com.github.junrar:junrar:7.5.4"
 
 sqlite-framework = { module = "androidx.sqlite:sqlite-framework", version.ref = "sqlite" }
 sqlite-ktx = { module = "androidx.sqlite:sqlite-ktx", version.ref = "sqlite" }
-sqlite-android = "com.github.requery:sqlite-android:3.41.1"
+sqlite-android = "com.github.requery:sqlite-android:3.42.0"
 
 preferencektx = "androidx.preference:preference-ktx:1.2.0"
 
 injekt-core = "com.github.inorichi.injekt:injekt-core:65b0440"
 
-coil-core = { module = "io.coil-kt:coil", version.ref = "coil_version" }
-coil-gif = { module = "io.coil-kt:coil-gif", version.ref = "coil_version" }
-coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil_version" }
+coil-bom = { module = "io.coil-kt:coil-bom", version = "2.4.0" }
+coil-core = { module = "io.coil-kt:coil" }
+coil-gif = { module = "io.coil-kt:coil-gif" }
+coil-compose = { module = "io.coil-kt:coil-compose" }
 
 subsamplingscaleimageview = "com.github.tachiyomiorg:subsampling-scale-image-view:c8e2650"
 image-decoder = "com.github.tachiyomiorg:image-decoder:7879b45"
@@ -56,18 +55,16 @@ richtext-m3 = { module = "com.halilibo.compose-richtext:richtext-ui-material3", 
 
 material = "com.google.android.material:material:1.9.0"
 flexible-adapter-core = "com.github.arkon.FlexibleAdapter:flexible-adapter:c8013533"
-flexible-adapter-ui = "com.github.arkon.FlexibleAdapter:flexible-adapter-ui:c8013533"
 photoview = "com.github.chrisbanes:PhotoView:2.3.0"
 directionalviewpager = "com.github.tachiyomiorg:DirectionalViewPager:1.0.0"
 insetter = "dev.chrisbanes.insetter:insetter:0.6.1"
-compose-cascade = "me.saket.cascade:cascade-compose:2.0.0-rc02"
-compose-materialmotion = "io.github.fornewid:material-motion-compose-core:0.12.2"
+compose-materialmotion = "io.github.fornewid:material-motion-compose-core:1.0.2"
 compose-simpleicons = "br.com.devsrsouza.compose.icons.android:simple-icons:1.0.0"
 
 logcat = "com.squareup.logcat:logcat:0.1"
 
 acra-http = "ch.acra:acra-http:5.9.7"
-firebase-analytics = "com.google.firebase:firebase-analytics-ktx:21.2.2"
+firebase-analytics = "com.google.firebase:firebase-analytics-ktx:21.3.0"
 
 aboutLibraries-gradle = { module = "com.mikepenz.aboutlibraries.plugin:aboutlibraries-plugin", version.ref = "aboutlib_version" }
 aboutLibraries-compose = { module = "com.mikepenz:aboutlibraries-compose", version.ref = "aboutlib_version" }
@@ -84,18 +81,17 @@ sqldelight-android-paging = { module = "com.squareup.sqldelight:android-paging3-
 sqldelight-gradle = { module = "com.squareup.sqldelight:gradle-plugin", version.ref = "sqldelight" }
 
 junit = "org.junit.jupiter:junit-jupiter:5.9.3"
-kotest-assertions = "io.kotest:kotest-assertions-core:5.6.1"
+kotest-assertions = "io.kotest:kotest-assertions-core:5.6.2"
+mockk = "io.mockk:mockk:1.13.5"
 
-voyager-navigator = { module = "ca.gosyer:voyager-navigator", version.ref = "voyager" }
-voyager-tab-navigator = { module = "ca.gosyer:voyager-tab-navigator", version.ref = "voyager" }
-voyager-transitions = { module = "ca.gosyer:voyager-transitions", version.ref = "voyager" }
+voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyager" }
+voyager-tab-navigator = { module = "cafe.adriel.voyager:voyager-tab-navigator", version.ref = "voyager" }
+voyager-transitions = { module = "cafe.adriel.voyager:voyager-transitions", version.ref = "voyager" }
 
 kotlinter = "org.jmailen.gradle:kotlinter-gradle:3.13.0"
 
-mockk = "io.mockk:mockk:1.13.5"
-
 [bundles]
-reactivex = ["rxandroid", "rxjava", "rxrelay"]
+reactivex = ["rxandroid", "rxjava"]
 okhttp = ["okhttp-core", "okhttp-logging", "okhttp-dnsoverhttps"]
 js-engine = ["quickjs-android"]
 sqlite = ["sqlite-framework", "sqlite-ktx", "sqlite-android"]
