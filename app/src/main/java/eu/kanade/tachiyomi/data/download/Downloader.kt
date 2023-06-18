@@ -631,7 +631,7 @@ class Downloader(
         source: HttpSource,
     ) {
         val chapterUrl = source.getChapterUrl(chapter.toSChapter())
-        val categories = runBlocking { getCategories.await(manga.id) }.map { "$CATAGORY_SYMBOL ${it.name.trim()}" }
+        val categories = runBlocking { getCategories.await(manga.id) }.map { it.name.trim() }.takeUnless { it.isEmpty() }
         val comicInfo = getComicInfo(manga, chapter, chapterUrl, categories)
         // Remove the old file
         dir.findFile(COMIC_INFO_FILE)?.delete()
@@ -725,7 +725,6 @@ class Downloader(
         const val WARNING_NOTIF_TIMEOUT_MS = 30_000L
         const val CHAPTERS_PER_SOURCE_QUEUE_WARNING_THRESHOLD = 15
         private const val DOWNLOADS_QUEUED_WARNING_THRESHOLD = 30
-        private const val CATAGORY_SYMBOL = "\uD83D\uDD30"
     }
 }
 

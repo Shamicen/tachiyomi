@@ -7,6 +7,7 @@ import nl.adaptivity.xmlutil.serialization.XmlSerialName
 import nl.adaptivity.xmlutil.serialization.XmlValue
 
 const val COMIC_INFO_FILE = "ComicInfo.xml"
+private const val CATAGORY_SYMBOL = "\uD83D\uDD30"
 
 fun SManga.copyFromComicInfo(comicInfo: ComicInfo) {
     comicInfo.series?.let { title = it.value }
@@ -18,6 +19,12 @@ fun SManga.copyFromComicInfo(comicInfo: ComicInfo) {
         comicInfo.tags?.value,
     )
         .flatMap { it.split(", ") }
+        .plus(
+            listOfNotNull(comicInfo.categories?.value).flatMap {
+                it.split(", ")
+                    .map { category -> "$CATAGORY_SYMBOL $category" } 
+            },
+        )
         .distinct()
         .joinToString(", ") { it.trim() }
         .takeIf { it.isNotEmpty() }
@@ -57,6 +64,7 @@ data class ComicInfo(
     val tags: Tags?,
     val web: Web?,
     val publishingStatus: PublishingStatusTachiyomi?,
+    val categories: CategoriesTachiyomi?,
 ) {
     @Suppress("UNUSED")
     @XmlElement(false)
@@ -128,6 +136,10 @@ data class ComicInfo(
     @Serializable
     @XmlSerialName("PublishingStatusTachiyomi", "http://www.w3.org/2001/XMLSchema", "ty")
     data class PublishingStatusTachiyomi(@XmlValue(true) val value: String = "")
+
+    @Serializable
+    @XmlSerialName("Categories", "http://www.w3.org/2001/XMLSchema", "ty")
+    data class CategoriesTachiyomi(@XmlValue(true) val value: String = "")
 }
 
 enum class ComicInfoPublishingStatus(
