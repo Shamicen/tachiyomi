@@ -55,6 +55,7 @@ import tachiyomi.core.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.presentation.core.screens.LoadingScreen
+import tachiyomi.source.local.LocalSource
 
 class MangaScreen(
     private val mangaId: Long,
@@ -295,7 +296,7 @@ class MangaScreen(
         }
 
         val previousController = navigator.items[navigator.size - 2]
-        if (previousController is BrowseSourceScreen && source is HttpSource) {
+        if (previousController is BrowseSourceScreen && (source is HttpSource || source is LocalSource)) {
             navigator.pop()
             previousController.searchGenre(genreName)
         } else {
