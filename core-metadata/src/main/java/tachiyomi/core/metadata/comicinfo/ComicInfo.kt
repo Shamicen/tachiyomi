@@ -22,7 +22,7 @@ fun SManga.copyFromComicInfo(comicInfo: ComicInfo) {
         .plus(
             listOfNotNull(comicInfo.categories?.value).flatMap {
                 it.split(", ")
-                    .map { category -> "$CATAGORY_SYMBOL $category" } 
+                    .map { category -> "$CATAGORY_SYMBOL $category" }
             },
         )
         .distinct()
