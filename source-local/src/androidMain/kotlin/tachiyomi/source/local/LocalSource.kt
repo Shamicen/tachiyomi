@@ -324,7 +324,8 @@ actual class LocalSource(
                 }
             }
         }
-        return Observable.just(MangasPage(includedManga.toList(), false))
+        val mangaPageList = includedManga.toList().chunked(20)
+        return Observable.just(MangasPage(mangaPageList[page - 1], page < mangaPageList.size))
     }
 
     private fun areAllElementsInMangaEntry(includedList: MutableList<String>, mangaEntry: String?): Boolean {
