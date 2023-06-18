@@ -229,38 +229,13 @@ actual class LocalSource(
         }
 
         includedManga = searchManga.filter { manga ->
-            (
-                if (includedGenres.isNotEmpty()) {
-                    manga.genre?.split(",")?.map { it.trim() }
-                        ?.let { areAllElementsCommon(it, includedGenres) } ?: false
-                } else {
-                    true
-                }
-                ) && (
-                if (includedAuthors.isNotEmpty()) {
-                    manga.author?.split(",")?.map { it.trim() }
-                        ?.let { areAllElementsCommon(it, includedAuthors) } ?: false
-                } else {
-                    true
-                }
-                ) && (
-                if (includedArtists.isNotEmpty()) {
-                    manga.artist?.split(",")?.map { it.trim() }
-                        ?.let { areAllElementsCommon(it, includedArtists) } ?: false
-                } else {
-                    true
-                }
-                ) && (
-                if (includedStatuses.isNotEmpty()) {
-                    includedStatuses.map { getStatusIntFromString(it) }.contains(manga.status)
-                } else {
-                    true
-                }
-                )
+            areAllElementsInMangaEntry(includedGenres, manga.genre) &&
+                areAllElementsInMangaEntry(includedAuthors, manga.author) &&
+                areAllElementsInMangaEntry(includedArtists, manga.artist) &&
+                (if (includedStatuses.isNotEmpty()) includedStatuses.map { getStatusIntFromString(it) }.contains(manga.status) else true)
         }.toMutableList()
 
-        if (
-            includedGenres.isEmpty() &&
+        if (includedGenres.isEmpty() &&
             includedAuthors.isEmpty() &&
             includedArtists.isEmpty() &&
             includedStatuses.isEmpty()
@@ -352,11 +327,13 @@ actual class LocalSource(
         return Observable.just(MangasPage(includedManga.toList(), false))
     }
 
-    private fun areAllElementsCommon(
-        ListToMatch: List<String>,
-        subListToMatch: List<String>,
-    ): Boolean {
-        return subListToMatch.all { it in ListToMatch.toSet() }
+    private fun areAllElementsInMangaEntry(includedList: MutableList<String>, mangaEntry: String?): Boolean {
+        return if (includedList.isNotEmpty()) {
+            mangaEntry?.split(",")?.map { it.trim() }
+                ?.let { mangaEntryList -> includedList.all { it in mangaEntryList } } ?: false
+        } else {
+            true
+        }
     }
 
     private fun getStatusIntFromString(statusString: String): Int {
