@@ -56,7 +56,18 @@ actual class LocalSource(
     private val xml: XML by injectLazy()
     private val mangaRepository: MangaRepository by injectLazy()
 
-    private lateinit var localManga: List<SManga>
+    private var localManga: List<SManga> = emptyList()
+
+    private val mangaChunks = fileSystem.getFilesInBaseDirectories()
+        // Filter out files that are hidden and is not a folder
+        .filter { it.isDirectory && !it.name.startsWith('.') }
+        .distinctBy { it.name }
+        .toList()
+        .chunked(MANGA_LOADING_CHUNK_SIZE)
+
+    private var allMangaLoaded = false
+
+    private var includedChunkIndex = -1
 
     private val POPULAR_FILTERS = FilterList(OrderBy.Popular(context))
     private val LATEST_FILTERS = FilterList(OrderBy.Latest(context))
@@ -71,62 +82,63 @@ actual class LocalSource(
 
     override val supportsLatest: Boolean = true
 
-    private fun getAllManga(): List<SManga> {
-        val mangaDirs = fileSystem.getFilesInBaseDirectories()
-            // Filter out files that are hidden and is not a folder
-            .filter { it.isDirectory && !it.name.startsWith('.') }
-            .distinctBy { it.name }
+    private fun loadMangaForPage(page: Int) {
+        if (localManga.size >= page * MANGA_LOADING_CHUNK_SIZE) return
+        // don't load last page multiple times
+        if (localManga.size.mod(MANGA_LOADING_CHUNK_SIZE) != 0) return
 
-        return mangaDirs.toList().parallelStream().map { mangaDir ->
-            SManga.create().apply manga@{
-                url = mangaDir.name
-                lastModified = mangaDir.lastModified()
+        localManga = localManga.plus(
+            mangaChunks[page - 1].parallelStream().map { mangaDir ->
+                SManga.create().apply manga@{
+                    url = mangaDir.name
+                    lastModified = mangaDir.lastModified()
 
-                val localMangaList = runBlocking { getMangaList() }
-                title = localMangaList[url]?.title ?: mangaDir.name
-                author = localMangaList[url]?.author
-                artist = localMangaList[url]?.artist
-                description = localMangaList[url]?.description
-                genre = localMangaList[url]?.genre?.joinToString(", ") { it.trim() }
-                status = localMangaList[url]?.status?.toInt() ?: getStatusIntFromString("Unknown")
+                    val localMangaList = runBlocking { getMangaList() }
+                    title = localMangaList[url]?.title ?: mangaDir.name
+                    author = localMangaList[url]?.author
+                    artist = localMangaList[url]?.artist
+                    description = localMangaList[url]?.description
+                    genre = localMangaList[url]?.genre?.joinToString(", ") { it.trim() }
+                    status = localMangaList[url]?.status?.toInt() ?: getStatusIntFromString("Unknown")
 
-                // Try to find the cover
-                coverManager.find(mangaDir.name)
-                    ?.takeIf(File::exists)
-                    ?.let { thumbnail_url = it.absolutePath }
+                    // Try to find the cover
+                    coverManager.find(mangaDir.name)
+                        ?.takeIf(File::exists)
+                        ?.let { thumbnail_url = it.absolutePath }
 
-                // Fetch chapters and fill metadata
-                runBlocking {
-                    val chapters = getChapterList(this@manga)
-                    if (chapters.isNotEmpty()) {
-                        val chapter = chapters.last()
+                    // Fetch chapters and fill metadata
+                    runBlocking {
+                        val chapters = getChapterList(this@manga)
+                        if (chapters.isNotEmpty()) {
+                            val chapter = chapters.last()
 
-                        // only read metadata from disk if no optional field has metadata in the database yet
-                        if (
-                            author.isNullOrBlank() &&
-                            artist.isNullOrBlank() &&
-                            description.isNullOrBlank() &&
-                            genre.isNullOrBlank() &&
-                            status == getStatusIntFromString("Unknown")
-                        ) {
-                            when (val format = getFormat(chapter)) {
-                                is Format.Directory -> getMangaDetails(this@manga)
-                                is Format.Zip -> getMangaDetails(this@manga)
-                                is Format.Rar -> getMangaDetails(this@manga)
-                                is Format.Epub -> EpubFile(format.file).use { epub ->
-                                    epub.fillMangaMetadata(this@manga)
+                            // only read metadata from disk if no optional field has metadata in the database yet
+                            if (
+                                author.isNullOrBlank() &&
+                                artist.isNullOrBlank() &&
+                                description.isNullOrBlank() &&
+                                genre.isNullOrBlank() &&
+                                status == getStatusIntFromString("Unknown")
+                            ) {
+                                when (val format = getFormat(chapter)) {
+                                    is Format.Directory -> getMangaDetails(this@manga)
+                                    is Format.Zip -> getMangaDetails(this@manga)
+                                    is Format.Rar -> getMangaDetails(this@manga)
+                                    is Format.Epub -> EpubFile(format.file).use { epub ->
+                                        epub.fillMangaMetadata(this@manga)
+                                    }
                                 }
                             }
-                        }
 
-                        // Copy the cover from the first chapter found if not available
-                        if (this@manga.thumbnail_url == null) {
-                            updateCover(chapter, this@manga)
+                            // Copy the cover from the first chapter found if not available
+                            if (this@manga.thumbnail_url == null) {
+                                updateCover(chapter, this@manga)
+                            }
                         }
                     }
                 }
-            }
-        }.toList()
+            }.toList(),
+        )
     }
 
     // Browse related
@@ -144,7 +156,8 @@ actual class LocalSource(
         OLDEST,
     }
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
-        if (!this::localManga.isInitialized) localManga = getAllManga()
+        loadMangaForPage(page)
+
         var includedManga: MutableList<SManga>
 
         val lastModifiedLimit by lazy { if (filters === LATEST_FILTERS) System.currentTimeMillis() - LATEST_THRESHOLD else 0L }
@@ -245,28 +258,40 @@ actual class LocalSource(
 
         when (orderByPopular) {
             OrderByPopular.POPULAR_ASCENDING ->
-                includedManga =
+                includedManga = if (allMangaLoaded) {
                     includedManga.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
                         .toMutableList()
+                } else {
+                    includedManga
+                }
 
             OrderByPopular.POPULAR_DESCENDING ->
-                includedManga =
+                includedManga = if (allMangaLoaded) {
                     includedManga.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
                         .toMutableList()
+                } else {
+                    includedManga
+                }
 
             OrderByPopular.NOT_SET -> Unit
         }
 
         when (orderByLatest) {
             OrderByLatest.LATEST ->
-                includedManga =
+                includedManga = if (allMangaLoaded) {
                     includedManga.sortedBy { it.lastModified }
                         .toMutableList()
+                } else {
+                    includedManga
+                }
 
             OrderByLatest.OLDEST ->
-                includedManga =
+                includedManga = if (allMangaLoaded) {
                     includedManga.sortedByDescending { it.lastModified }
                         .toMutableList()
+                } else {
+                    includedManga
+                }
 
             OrderByLatest.NOT_SET -> Unit
         }
@@ -324,8 +349,20 @@ actual class LocalSource(
                 }
             }
         }
-        val mangaPageList = includedManga.toList().chunked(20)
-        return Observable.just(MangasPage(mangaPageList[page - 1], page < mangaPageList.size))
+        val mangaPageList = includedManga.toList().chunked(MANGA_LOADING_CHUNK_SIZE)
+
+        if (page == 1) includedChunkIndex = -1
+        if (includedChunkIndex <= mangaPageList.lastIndex) {
+            includedChunkIndex++
+        } else {
+            includedChunkIndex = mangaPageList.lastIndex
+        }
+
+        val lastLocalMangaPageReached = (mangaChunks.lastIndex == page - 1)
+        val lastPage = (lastLocalMangaPageReached || mangaPageList[includedChunkIndex].size.mod(MANGA_LOADING_CHUNK_SIZE) != 0)
+
+        if (lastLocalMangaPageReached) allMangaLoaded = true
+        return Observable.just(MangasPage(mangaPageList[includedChunkIndex], !lastPage))
     }
 
     private fun areAllElementsInMangaEntry(includedList: MutableList<String>, mangaEntry: String?): Boolean {
@@ -503,8 +540,6 @@ actual class LocalSource(
     private class StatusGroup(filters: List<StatusFilter>) : Filter.Group<StatusFilter>("Status", filters)
 
     override fun getFilterList(): FilterList {
-        if (!this::localManga.isInitialized) localManga = getAllManga()
-
         val genres = localManga.mapNotNull { it.genre?.split(",") }
             .flatMap { it.map { genre -> genre.trim() } }.toSet()
 
@@ -605,6 +640,7 @@ actual class LocalSource(
         const val HELP_URL = "https://tachiyomi.org/help/guides/local-manga/"
 
         private val LATEST_THRESHOLD = 7.days.inWholeMilliseconds
+        private const val MANGA_LOADING_CHUNK_SIZE = 20
     }
 }
 
