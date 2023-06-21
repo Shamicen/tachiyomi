@@ -537,13 +537,13 @@ actual class LocalSource(
 
     // Filters
     private class GenreFilter(genre: String) : Filter.TriState(genre)
-    private class GenreGroup(genres: List<GenreFilter>) : Filter.Group<GenreFilter>("Genres", genres)
+    private class GenreGroup(context: Context, genres: List<GenreFilter>) : Filter.Group<GenreFilter>(context.getString(R.string.local_filter_genres), genres)
     private class AuthorFilter(author: String) : Filter.TriState(author)
-    private class AuthorGroup(authors: List<AuthorFilter>) : Filter.Group<AuthorFilter>("Authors", authors)
+    private class AuthorGroup(context: Context, authors: List<AuthorFilter>) : Filter.Group<AuthorFilter>(context.getString(R.string.local_filter_authors), authors)
     private class ArtistFilter(genre: String) : Filter.TriState(genre)
-    private class ArtistGroup(genres: List<ArtistFilter>) : Filter.Group<ArtistFilter>("Artists", genres)
+    private class ArtistGroup(context: Context, artists: List<ArtistFilter>) : Filter.Group<ArtistFilter>(context.getString(R.string.local_filter_artists), artists)
     private class StatusFilter(name: String) : Filter.TriState(name)
-    private class StatusGroup(filters: List<StatusFilter>) : Filter.Group<StatusFilter>("Status", filters)
+    private class StatusGroup(context: Context, filters: List<StatusFilter>) : Filter.Group<StatusFilter>(context.getString(R.string.local_filter_status), filters)
 
     override fun getFilterList(): FilterList {
         val genres = localManga.mapNotNull { it.genre?.split(",") }
@@ -558,18 +558,19 @@ actual class LocalSource(
         val filters = try {
             mutableListOf<Filter<*>>(
                 OrderBy.Popular(context),
-                GenreGroup(genres.map { GenreFilter(it) }),
-                AuthorGroup(authors.map { AuthorFilter(it) }),
-                ArtistGroup(artists.map { ArtistFilter(it) }),
+                GenreGroup(context, genres.map { GenreFilter(it) }),
+                AuthorGroup(context, authors.map { AuthorFilter(it) }),
+                ArtistGroup(context, artists.map { ArtistFilter(it) }),
                 StatusGroup(
+                    context,
                     listOf(
-                        "Ongoing",
-                        "Completed",
-                        "Licensed",
-                        "Publishing finished",
-                        "Cancelled",
-                        "On hiatus",
-                        "Unknown",
+                        context.getString(R.string.ongoing),
+                        context.getString(R.string.completed),
+                        context.getString(R.string.licensed),
+                        context.getString(R.string.publishing_finished),
+                        context.getString(R.string.cancelled),
+                        context.getString(R.string.on_hiatus),
+                        context.getString(R.string.unknown),
                     ).map { StatusFilter(it) },
                 ),
             )

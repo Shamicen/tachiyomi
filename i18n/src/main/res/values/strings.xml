@@ -636,6 +636,10 @@
     <string name="chapter_not_found">Chapter not found</string>
     <string name="local_invalid_format">Invalid chapter format</string>
     <string name="local_filter_order_by">Order by</string>
+    <string name="local_filter_genres">Genres</string>
+    <string name="local_filter_authors">Authors</string>
+    <string name="local_filter_artists">Artists</string>
+    <string name="local_filter_status">Status</string>
     <string name="date">Date</string>
     <plurals name="day">
         <item quantity="one">1 day</item>
