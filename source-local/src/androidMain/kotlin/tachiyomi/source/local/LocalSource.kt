@@ -58,12 +58,7 @@ actual class LocalSource(
 
     private var localManga: List<SManga> = emptyList()
 
-    private val mangaChunks = fileSystem.getFilesInBaseDirectories()
-        // Filter out files that are hidden and is not a folder
-        .filter { it.isDirectory && !it.name.startsWith('.') }
-        .distinctBy { it.name }
-        .toList()
-        .chunked(MANGA_LOADING_CHUNK_SIZE)
+    private lateinit var mangaChunks: List<List<File>>
 
     private var allMangaLoaded = false
     private var isFilteredSearch = false
@@ -157,6 +152,15 @@ actual class LocalSource(
         OLDEST,
     }
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
+        if (!this::mangaChunks.isInitialized) {
+            mangaChunks = fileSystem.getFilesInBaseDirectories()
+                // Filter out files that are hidden and is not a folder
+                .filter { it.isDirectory && !it.name.startsWith('.') }
+                .distinctBy { it.name }
+                .toList()
+                .chunked(MANGA_LOADING_CHUNK_SIZE)
+        }
+
         loadMangaForPage(page)
 
         var includedManga: MutableList<SManga>
@@ -384,13 +388,13 @@ actual class LocalSource(
 
     private fun getStatusIntFromString(statusString: String): Int {
         return when (statusString) {
-            "Unknown" -> 0
-            "Ongoing" -> 1
-            "Completed" -> 2
-            "Licensed" -> 3
-            "Publishing finished" -> 4
-            "Cancelled" -> 5
-            "On hiatus" -> 6
+            "Unknown" -> SManga.UNKNOWN
+            "Ongoing" -> SManga.ONGOING
+            "Completed" -> SManga.COMPLETED
+            "Licensed" -> SManga.LICENSED
+            "Publishing finished" -> SManga.PUBLISHING_FINISHED
+            "Cancelled" -> SManga.CANCELLED
+            "On hiatus" -> SManga.ON_HIATUS
             else -> throw IllegalStateException("$statusString is not a valid status")
         }
     }
