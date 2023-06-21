@@ -66,6 +66,7 @@ actual class LocalSource(
             .chunked(MANGA_LOADING_CHUNK_SIZE)
     }
 
+    private var loadedPages = 0
     private var allMangaLoaded = false
     private var isFilteredSearch = false
 
@@ -85,9 +86,10 @@ actual class LocalSource(
     override val supportsLatest: Boolean = true
 
     private fun loadMangaForPage(page: Int) {
-        if (localManga.size >= page * MANGA_LOADING_CHUNK_SIZE) return
-        // don't load last page multiple times
-        if (allMangaLoaded && localManga.size.mod(MANGA_LOADING_CHUNK_SIZE) != 0) return
+        if (page != loadedPages + 1) return
+        if (allMangaLoaded) return
+
+        loadedPages++
 
         localManga = localManga.plus(
             mangaChunks[page - 1].parallelStream().map { mangaDir ->
