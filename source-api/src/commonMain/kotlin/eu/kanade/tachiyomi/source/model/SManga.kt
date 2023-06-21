@@ -76,13 +76,14 @@ interface SManga : Serializable {
 
     fun getStatusString(): String {
         return when (this.status) {
-            1 -> "Ongoing"
-            2 -> "Completed"
-            3 -> "Licensed"
-            4 -> "Publishing finished"
-            5 -> "Cancelled"
-            6 -> "On hiatus"
-            else -> "Unknown"
+            UNKNOWN -> "Unknown"
+            ONGOING -> "Ongoing"
+            COMPLETED -> "Completed"
+            LICENSED -> "Licensed"
+            PUBLISHING_FINISHED -> "Publishing finished"
+            CANCELLED -> "Cancelled"
+            ON_HIATUS -> "On hiatus"
+            else -> throw IllegalStateException("Status must have a value between 0 and 6")
         }
     }
 

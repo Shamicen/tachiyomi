@@ -66,6 +66,7 @@ actual class LocalSource(
         .chunked(MANGA_LOADING_CHUNK_SIZE)
 
     private var allMangaLoaded = false
+    private var isFilteredSearch = false
 
     private var includedChunkIndex = -1
 
@@ -254,46 +255,9 @@ actual class LocalSource(
             includedStatuses.isEmpty()
         ) {
             includedManga = searchManga.toMutableList()
-        }
-
-        when (orderByPopular) {
-            OrderByPopular.POPULAR_ASCENDING ->
-                includedManga = if (allMangaLoaded) {
-                    includedManga.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
-                        .toMutableList()
-                } else {
-                    includedManga
-                }
-
-            OrderByPopular.POPULAR_DESCENDING ->
-                includedManga = if (allMangaLoaded) {
-                    includedManga.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
-                        .toMutableList()
-                } else {
-                    includedManga
-                }
-
-            OrderByPopular.NOT_SET -> Unit
-        }
-
-        when (orderByLatest) {
-            OrderByLatest.LATEST ->
-                includedManga = if (allMangaLoaded) {
-                    includedManga.sortedBy { it.lastModified }
-                        .toMutableList()
-                } else {
-                    includedManga
-                }
-
-            OrderByLatest.OLDEST ->
-                includedManga = if (allMangaLoaded) {
-                    includedManga.sortedByDescending { it.lastModified }
-                        .toMutableList()
-                } else {
-                    includedManga
-                }
-
-            OrderByLatest.NOT_SET -> Unit
+            isFilteredSearch = false
+        } else {
+            isFilteredSearch = true
         }
 
         filters.forEach { filter ->
@@ -303,6 +267,7 @@ actual class LocalSource(
                     filter.state.forEach { genre ->
                         when (genre.state) {
                             Filter.TriState.STATE_EXCLUDE -> {
+                                isFilteredSearch = true
                                 includedManga.removeIf { manga ->
                                     manga.genre?.split(",")?.map { it.trim() }?.contains(genre.name) ?: false
                                 }
@@ -314,6 +279,7 @@ actual class LocalSource(
                     filter.state.forEach { author ->
                         when (author.state) {
                             Filter.TriState.STATE_EXCLUDE -> {
+                                isFilteredSearch = true
                                 includedManga.removeIf { manga ->
                                     manga.author?.split(",")?.map { it.trim() }?.contains(author.name) ?: false
                                 }
@@ -325,6 +291,7 @@ actual class LocalSource(
                     filter.state.forEach { artist ->
                         when (artist.state) {
                             Filter.TriState.STATE_EXCLUDE -> {
+                                isFilteredSearch = true
                                 includedManga.removeIf { manga ->
                                     manga.artist?.split(",")?.map { it.trim() }?.contains(artist.name) ?: false
                                 }
@@ -336,6 +303,7 @@ actual class LocalSource(
                     filter.state.forEach { status ->
                         when (status.state) {
                             Filter.TriState.STATE_EXCLUDE -> {
+                                isFilteredSearch = true
                                 includedManga.removeIf { manga ->
                                     manga.getStatusString() == status.name
                                 }
@@ -349,6 +317,45 @@ actual class LocalSource(
                 }
             }
         }
+        when (orderByPopular) {
+            OrderByPopular.POPULAR_ASCENDING ->
+                includedManga = if (allMangaLoaded || isFilteredSearch) {
+                    includedManga.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                        .toMutableList()
+                } else {
+                    includedManga
+                }
+
+            OrderByPopular.POPULAR_DESCENDING ->
+                includedManga = if (allMangaLoaded || isFilteredSearch) {
+                    includedManga.sortedWith(compareByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
+                        .toMutableList()
+                } else {
+                    includedManga
+                }
+
+            OrderByPopular.NOT_SET -> Unit
+        }
+        when (orderByLatest) {
+            OrderByLatest.LATEST ->
+                includedManga = if (allMangaLoaded || isFilteredSearch) {
+                    includedManga.sortedBy { it.lastModified }
+                        .toMutableList()
+                } else {
+                    includedManga
+                }
+
+            OrderByLatest.OLDEST ->
+                includedManga = if (allMangaLoaded || isFilteredSearch) {
+                    includedManga.sortedByDescending { it.lastModified }
+                        .toMutableList()
+                } else {
+                    includedManga
+                }
+
+            OrderByLatest.NOT_SET -> Unit
+        }
+
         val mangaPageList = includedManga.toList().chunked(MANGA_LOADING_CHUNK_SIZE)
 
         if (page == 1) includedChunkIndex = -1
@@ -359,9 +366,10 @@ actual class LocalSource(
         }
 
         val lastLocalMangaPageReached = (mangaChunks.lastIndex == page - 1)
-        val lastPage = (lastLocalMangaPageReached || mangaPageList[includedChunkIndex].size.mod(MANGA_LOADING_CHUNK_SIZE) != 0)
-
         if (lastLocalMangaPageReached) allMangaLoaded = true
+
+        val lastPage = (lastLocalMangaPageReached || (isFilteredSearch && includedChunkIndex == mangaPageList.lastIndex))
+
         return Observable.just(MangasPage(mangaPageList[includedChunkIndex], !lastPage))
     }
 
@@ -383,7 +391,7 @@ actual class LocalSource(
             "Publishing finished" -> 4
             "Cancelled" -> 5
             "On hiatus" -> 6
-            else -> 0
+            else -> throw IllegalStateException("$statusString is not a valid status")
         }
     }
 
