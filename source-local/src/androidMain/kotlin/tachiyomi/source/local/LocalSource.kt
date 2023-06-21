@@ -87,8 +87,6 @@ actual class LocalSource(
 
     private fun loadMangaForPage(page: Int) {
         if (page != loadedPages + 1) return
-        if (allMangaLoaded) return
-
         loadedPages++
 
         localManga = localManga.plus(
