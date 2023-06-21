@@ -349,7 +349,12 @@ actual class LocalSource(
             OrderByLatest.NOT_SET -> Unit
         }
 
-        val mangaPageList = includedManga.toList().chunked(MANGA_LOADING_CHUNK_SIZE)
+        val mangaPageList =
+            if (includedManga.isNotEmpty()) {
+                includedManga.toList().chunked(MANGA_LOADING_CHUNK_SIZE)
+            } else {
+                listOf(emptyList())
+            }
 
         if (page == 1) includedChunkIndex = -1
         if (includedChunkIndex <= mangaPageList.lastIndex) {
