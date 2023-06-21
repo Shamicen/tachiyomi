@@ -42,7 +42,6 @@ import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.zip.ZipFile
 import kotlin.streams.toList
-import kotlin.time.Duration.Companion.days
 import com.github.junrar.Archive as JunrarArchive
 import tachiyomi.domain.source.model.Source as DomainSource
 
@@ -58,7 +57,14 @@ actual class LocalSource(
 
     private var localManga: List<SManga> = emptyList()
 
-    private lateinit var mangaChunks: List<List<File>>
+    private val mangaChunks: List<List<File>> by lazy {
+        fileSystem.getFilesInBaseDirectories()
+            // Filter out files that are hidden and is not a folder
+            .filter { it.isDirectory && !it.name.startsWith('.') }
+            .distinctBy { it.name }
+            .toList()
+            .chunked(MANGA_LOADING_CHUNK_SIZE)
+    }
 
     private var allMangaLoaded = false
     private var isFilteredSearch = false
@@ -81,7 +87,7 @@ actual class LocalSource(
     private fun loadMangaForPage(page: Int) {
         if (localManga.size >= page * MANGA_LOADING_CHUNK_SIZE) return
         // don't load last page multiple times
-        if (localManga.size.mod(MANGA_LOADING_CHUNK_SIZE) != 0) return
+        if (allMangaLoaded && localManga.size.mod(MANGA_LOADING_CHUNK_SIZE) != 0) return
 
         localManga = localManga.plus(
             mangaChunks[page - 1].parallelStream().map { mangaDir ->
@@ -152,32 +158,13 @@ actual class LocalSource(
         OLDEST,
     }
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
-        if (!this::mangaChunks.isInitialized) {
-            mangaChunks = fileSystem.getFilesInBaseDirectories()
-                // Filter out files that are hidden and is not a folder
-                .filter { it.isDirectory && !it.name.startsWith('.') }
-                .distinctBy { it.name }
-                .toList()
-                .chunked(MANGA_LOADING_CHUNK_SIZE)
-        }
-
         loadMangaForPage(page)
 
+        val searchManga = localManga
         var includedManga: MutableList<SManga>
 
-        val lastModifiedLimit by lazy { if (filters === LATEST_FILTERS) System.currentTimeMillis() - LATEST_THRESHOLD else 0L }
-        val searchManga = localManga
-            .filter { manga -> // Filter by query or last modified
-                if (lastModifiedLimit == 0L) {
-                    manga.title.contains(query, ignoreCase = true) ||
-                        File(manga.url).name.contains(query, ignoreCase = true)
-                } else {
-                    File(manga.url).lastModified() >= lastModifiedLimit
-                }
-            }
-
         var orderByPopular = OrderByPopular.NOT_SET
-        var orderByLatest = OrderByLatest.NOT_SET
+        var orderByLatest = if (filters === LATEST_FILTERS) OrderByLatest.LATEST else OrderByLatest.NOT_SET
 
         val includedGenres = mutableListOf<String>()
         val includedAuthors = mutableListOf<String>()
@@ -247,13 +234,15 @@ actual class LocalSource(
         }
 
         includedManga = searchManga.filter { manga ->
-            areAllElementsInMangaEntry(includedGenres, manga.genre) &&
+            (manga.title.contains(query, ignoreCase = true) || File(manga.url).name.contains(query, ignoreCase = true)) &&
+                areAllElementsInMangaEntry(includedGenres, manga.genre) &&
                 areAllElementsInMangaEntry(includedAuthors, manga.author) &&
                 areAllElementsInMangaEntry(includedArtists, manga.artist) &&
                 (if (includedStatuses.isNotEmpty()) includedStatuses.map { getStatusIntFromString(it) }.contains(manga.status) else true)
         }.toMutableList()
 
-        if (includedGenres.isEmpty() &&
+        if (query.isBlank() &&
+            includedGenres.isEmpty() &&
             includedAuthors.isEmpty() &&
             includedArtists.isEmpty() &&
             includedStatuses.isEmpty()
@@ -651,7 +640,6 @@ actual class LocalSource(
         const val ID = 0L
         const val HELP_URL = "https://tachiyomi.org/help/guides/local-manga/"
 
-        private val LATEST_THRESHOLD = 7.days.inWholeMilliseconds
         private const val MANGA_LOADING_CHUNK_SIZE = 20
     }
 }
