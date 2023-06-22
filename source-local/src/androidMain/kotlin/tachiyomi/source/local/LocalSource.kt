@@ -164,7 +164,6 @@ actual class LocalSource(
     override fun fetchSearchManga(page: Int, query: String, filters: FilterList): Observable<MangasPage> {
         loadMangaForPage(page)
 
-        val searchManga = localManga
         var includedManga: MutableList<SManga>
 
         var orderByPopular =
@@ -285,7 +284,7 @@ actual class LocalSource(
             }
         }
 
-        includedManga = searchManga.filter { manga ->
+        includedManga = localManga.filter { manga ->
             (manga.title.contains(query, ignoreCase = true) || File(manga.url).name.contains(query, ignoreCase = true)) &&
                 areAllElementsInMangaEntry(includedGenres, manga.genre) &&
                 areAllElementsInMangaEntry(includedAuthors, manga.author) &&
@@ -299,7 +298,7 @@ actual class LocalSource(
             includedArtists.isEmpty() &&
             includedStatuses.isEmpty()
         ) {
-            includedManga = searchManga.toMutableList()
+            includedManga = localManga.toMutableList()
             isFilteredSearch = false
         } else {
             isFilteredSearch = true
