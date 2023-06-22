@@ -62,15 +62,15 @@ actual class LocalSource(
             // Filter out files that are hidden and is not a folder
             .filter { it.isDirectory && !it.name.startsWith('.') }
             .distinctBy { it.name }
+            .sortedBy { it.name }
             .toList()
             .chunked(MANGA_LOADING_CHUNK_SIZE)
     }
 
     private var loadedPages = 0
+    private var includedChunkIndex = -1
     private var allMangaLoaded = false
     private var isFilteredSearch = false
-
-    private var includedChunkIndex = -1
 
     private val POPULAR_FILTERS = FilterList(OrderBy.Popular(context))
     private val LATEST_FILTERS = FilterList(OrderBy.Latest(context))
@@ -85,62 +85,66 @@ actual class LocalSource(
 
     override val supportsLatest: Boolean = true
 
-    private fun loadMangaForPage(page: Int) {
-        if (page != loadedPages + 1) return
-        loadedPages++
+    private fun loadMangaForPage(page: Int, loadOnlyThisPage: Boolean = false): List<SManga>? {
+        if (page != loadedPages + 1 && !loadOnlyThisPage) return null
+        if (!loadOnlyThisPage) loadedPages++
 
-        localManga = localManga.plus(
-            mangaChunks[page - 1].parallelStream().map { mangaDir ->
-                SManga.create().apply manga@{
-                    url = mangaDir.name
-                    lastModified = mangaDir.lastModified()
+        val mangaPage = mangaChunks[page - 1].parallelStream().map { mangaDir ->
+            SManga.create().apply manga@{
+                url = mangaDir.name
+                lastModified = mangaDir.lastModified()
 
-                    val localMangaList = runBlocking { getMangaList() }
-                    title = localMangaList[url]?.title ?: mangaDir.name
-                    author = localMangaList[url]?.author
-                    artist = localMangaList[url]?.artist
-                    description = localMangaList[url]?.description
-                    genre = localMangaList[url]?.genre?.joinToString(", ") { it.trim() }
-                    status = localMangaList[url]?.status?.toInt() ?: getStatusIntFromString("Unknown")
+                val localMangaList = runBlocking { getMangaList() }
+                title = localMangaList[url]?.title ?: mangaDir.name
+                author = localMangaList[url]?.author
+                artist = localMangaList[url]?.artist
+                description = localMangaList[url]?.description
+                genre = localMangaList[url]?.genre?.joinToString(", ") { it.trim() }
+                status = localMangaList[url]?.status?.toInt() ?: getStatusIntFromString("Unknown")
 
-                    // Try to find the cover
-                    coverManager.find(mangaDir.name)
-                        ?.takeIf(File::exists)
-                        ?.let { thumbnail_url = it.absolutePath }
+                // Try to find the cover
+                coverManager.find(mangaDir.name)
+                    ?.takeIf(File::exists)
+                    ?.let { thumbnail_url = it.absolutePath }
 
-                    // Fetch chapters and fill metadata
-                    runBlocking {
-                        val chapters = getChapterList(this@manga)
-                        if (chapters.isNotEmpty()) {
-                            val chapter = chapters.last()
+                // Fetch chapters and fill metadata
+                runBlocking {
+                    val chapters = getChapterList(this@manga)
+                    if (chapters.isNotEmpty()) {
+                        val chapter = chapters.last()
 
-                            // only read metadata from disk if no optional field has metadata in the database yet
-                            if (
-                                author.isNullOrBlank() &&
-                                artist.isNullOrBlank() &&
-                                description.isNullOrBlank() &&
-                                genre.isNullOrBlank() &&
-                                status == getStatusIntFromString("Unknown")
-                            ) {
-                                when (val format = getFormat(chapter)) {
-                                    is Format.Directory -> getMangaDetails(this@manga)
-                                    is Format.Zip -> getMangaDetails(this@manga)
-                                    is Format.Rar -> getMangaDetails(this@manga)
-                                    is Format.Epub -> EpubFile(format.file).use { epub ->
-                                        epub.fillMangaMetadata(this@manga)
-                                    }
+                        // only read metadata from disk if no optional field has metadata in the database yet
+                        if (author.isNullOrBlank() &&
+                            artist.isNullOrBlank() &&
+                            description.isNullOrBlank() &&
+                            genre.isNullOrBlank() &&
+                            status == getStatusIntFromString("Unknown")
+                        ) {
+                            when (val format = getFormat(chapter)) {
+                                is Format.Directory -> getMangaDetails(this@manga)
+                                is Format.Zip -> getMangaDetails(this@manga)
+                                is Format.Rar -> getMangaDetails(this@manga)
+                                is Format.Epub -> EpubFile(format.file).use { epub ->
+                                    epub.fillMangaMetadata(this@manga)
                                 }
                             }
+                        }
 
-                            // Copy the cover from the first chapter found if not available
-                            if (this@manga.thumbnail_url == null) {
-                                updateCover(chapter, this@manga)
-                            }
+                        // Copy the cover from the first chapter found if not available
+                        if (this@manga.thumbnail_url == null) {
+                            updateCover(chapter, this@manga)
                         }
                     }
                 }
-            }.toList(),
-        )
+            }
+        }.toList()
+
+        return if (loadOnlyThisPage) {
+            mangaPage
+        } else {
+            localManga = localManga.plus(mangaPage)
+            null
+        }
     }
 
     // Browse related
@@ -163,16 +167,37 @@ actual class LocalSource(
         val searchManga = localManga
         var includedManga: MutableList<SManga>
 
-        var orderByPopular = OrderByPopular.NOT_SET
-        var orderByLatest = if (filters === LATEST_FILTERS) OrderByLatest.LATEST else OrderByLatest.NOT_SET
+        var orderByPopular =
+            if (filters === POPULAR_FILTERS) {
+                OrderByPopular.POPULAR_ASCENDING
+            } else {
+                OrderByLatest.NOT_SET
+            }
+        var orderByLatest =
+            if (filters === LATEST_FILTERS) {
+                OrderByLatest.LATEST
+            } else {
+                OrderByLatest.NOT_SET
+            }
+
+        var loadRandomMangaPage = false
 
         val includedGenres = mutableListOf<String>()
         val includedAuthors = mutableListOf<String>()
         val includedArtists = mutableListOf<String>()
         val includedStatuses = mutableListOf<String>()
 
+        val excludedGenres = mutableListOf<String>()
+        val excludedAuthors = mutableListOf<String>()
+        val excludedArtists = mutableListOf<String>()
+
         filters.forEach { filter ->
             when (filter) {
+                is LoadRandomMangaPage -> {
+                    if (filter.state) {
+                        loadRandomMangaPage = true
+                    }
+                }
                 is OrderBy.Popular -> {
                     orderByPopular = if (filter.state!!.ascending) {
                         OrderByPopular.POPULAR_ASCENDING
@@ -199,6 +224,15 @@ actual class LocalSource(
                         }
                     }
                 }
+                is GenreTextSearch -> {
+                    val genreList = filter.state.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim() }
+                    genreList?.forEach {
+                        when (it.first()) {
+                            '-' -> excludedGenres.add(it.drop(1).trim())
+                            else -> includedGenres.add(it)
+                        }
+                    }
+                }
                 is AuthorGroup -> {
                     filter.state.forEach { author ->
                         when (author.state) {
@@ -208,12 +242,30 @@ actual class LocalSource(
                         }
                     }
                 }
+                is AuthorTextSearch -> {
+                    val authorList = filter.state.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim() }
+                    authorList?.forEach {
+                        when (it.first()) {
+                            '-' -> excludedAuthors.add(it.drop(1).trim())
+                            else -> includedAuthors.add(it)
+                        }
+                    }
+                }
                 is ArtistGroup -> {
                     filter.state.forEach { artist ->
                         when (artist.state) {
                             Filter.TriState.STATE_INCLUDE -> {
                                 includedArtists.add(artist.name)
                             }
+                        }
+                    }
+                }
+                is ArtistTextSearch -> {
+                    val artistList = filter.state.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim() }
+                    artistList?.forEach {
+                        when (it.first()) {
+                            '-' -> excludedArtists.add(it.drop(1).trim())
+                            else -> includedArtists.add(it)
                         }
                     }
                 }
@@ -260,10 +312,7 @@ actual class LocalSource(
                     filter.state.forEach { genre ->
                         when (genre.state) {
                             Filter.TriState.STATE_EXCLUDE -> {
-                                isFilteredSearch = true
-                                includedManga.removeIf { manga ->
-                                    manga.genre?.split(",")?.map { it.trim() }?.contains(genre.name) ?: false
-                                }
+                                excludedGenres.add(genre.name)
                             }
                         }
                     }
@@ -272,10 +321,7 @@ actual class LocalSource(
                     filter.state.forEach { author ->
                         when (author.state) {
                             Filter.TriState.STATE_EXCLUDE -> {
-                                isFilteredSearch = true
-                                includedManga.removeIf { manga ->
-                                    manga.author?.split(",")?.map { it.trim() }?.contains(author.name) ?: false
-                                }
+                                excludedAuthors.add(author.name)
                             }
                         }
                     }
@@ -284,10 +330,7 @@ actual class LocalSource(
                     filter.state.forEach { artist ->
                         when (artist.state) {
                             Filter.TriState.STATE_EXCLUDE -> {
-                                isFilteredSearch = true
-                                includedManga.removeIf { manga ->
-                                    manga.artist?.split(",")?.map { it.trim() }?.contains(artist.name) ?: false
-                                }
+                                excludedArtists.add(artist.name)
                             }
                         }
                     }
@@ -310,6 +353,25 @@ actual class LocalSource(
                 }
             }
         }
+        excludedGenres.forEach { genre ->
+            isFilteredSearch = true
+            includedManga.removeIf { manga ->
+                manga.genre?.split(",")?.map { it.trim() }?.any { it.equals(genre, ignoreCase = true) } ?: false
+            }
+        }
+        excludedAuthors.forEach { author ->
+            isFilteredSearch = true
+            includedManga.removeIf { manga ->
+                manga.author?.split(",")?.map { it.trim() }?.any { it.equals(author, ignoreCase = true) } ?: false
+            }
+        }
+        excludedArtists.forEach { artist ->
+            isFilteredSearch = true
+            includedManga.removeIf { manga ->
+                manga.artist?.split(",")?.map { it.trim() }?.any { it.equals(artist, ignoreCase = true) } ?: false
+            }
+        }
+
         when (orderByPopular) {
             OrderByPopular.POPULAR_ASCENDING ->
                 includedManga = if (allMangaLoaded || isFilteredSearch) {
@@ -350,7 +412,10 @@ actual class LocalSource(
         }
 
         val mangaPageList =
-            if (includedManga.isNotEmpty()) {
+            if (loadRandomMangaPage) {
+                val randomPageList = loadMangaForPage((1..mangaChunks.lastIndex + 1).random(), loadOnlyThisPage = true) ?: emptyList()
+                randomPageList.chunked(MANGA_LOADING_CHUNK_SIZE)
+            } else if (includedManga.isNotEmpty()) {
                 includedManga.toList().chunked(MANGA_LOADING_CHUNK_SIZE)
             } else {
                 listOf(emptyList())
@@ -366,7 +431,7 @@ actual class LocalSource(
         val lastLocalMangaPageReached = (mangaChunks.lastIndex == page - 1)
         if (lastLocalMangaPageReached) allMangaLoaded = true
 
-        val lastPage = (lastLocalMangaPageReached || (isFilteredSearch && includedChunkIndex == mangaPageList.lastIndex))
+        val lastPage = (lastLocalMangaPageReached || (isFilteredSearch && includedChunkIndex == mangaPageList.lastIndex) || loadRandomMangaPage)
 
         return Observable.just(MangasPage(mangaPageList[includedChunkIndex], !lastPage))
     }
@@ -374,7 +439,13 @@ actual class LocalSource(
     private fun areAllElementsInMangaEntry(includedList: MutableList<String>, mangaEntry: String?): Boolean {
         return if (includedList.isNotEmpty()) {
             mangaEntry?.split(",")?.map { it.trim() }
-                ?.let { mangaEntryList -> includedList.all { it in mangaEntryList } } ?: false
+                ?.let { mangaEntryList ->
+                    includedList.all { includedEntry ->
+                        mangaEntryList.any { mangaEntry ->
+                            mangaEntry.equals(includedEntry, ignoreCase = true)
+                        }
+                    }
+                } ?: false
         } else {
             true
         }
@@ -536,15 +607,21 @@ actual class LocalSource(
     }
 
     // Filters
+    private class LoadRandomMangaPage(context: Context, name: String = context.getString(R.string.local_filter_random_page)) : Filter.CheckBox(name)
     private class GenreFilter(genre: String) : Filter.TriState(genre)
     private class GenreGroup(context: Context, genres: List<GenreFilter>) : Filter.Group<GenreFilter>(context.getString(R.string.local_filter_genres), genres)
+    private class GenreTextSearch(context: Context) : Filter.Text(context.getString(R.string.local_filter_genres))
     private class AuthorFilter(author: String) : Filter.TriState(author)
     private class AuthorGroup(context: Context, authors: List<AuthorFilter>) : Filter.Group<AuthorFilter>(context.getString(R.string.local_filter_authors), authors)
+    private class AuthorTextSearch(context: Context) : Filter.Text(context.getString(R.string.local_filter_authors))
     private class ArtistFilter(genre: String) : Filter.TriState(genre)
     private class ArtistGroup(context: Context, artists: List<ArtistFilter>) : Filter.Group<ArtistFilter>(context.getString(R.string.local_filter_artists), artists)
+    private class ArtistTextSearch(context: Context) : Filter.Text(context.getString(R.string.local_filter_artists))
     private class StatusFilter(name: String) : Filter.TriState(name)
     private class StatusGroup(context: Context, filters: List<StatusFilter>) : Filter.Group<StatusFilter>(context.getString(R.string.local_filter_status), filters)
-
+    private class TextSearchHeader(context: Context) : Filter.Header(context.getString(R.string.local_filter_text_search_header))
+    private class LocalSourceInfoHeader(context: Context) : Filter.Header(context.getString(R.string.local_filter_info_header))
+    private class Separator : Filter.Separator()
     override fun getFilterList(): FilterList {
         val genres = localManga.mapNotNull { it.genre?.split(",") }
             .flatMap { it.map { genre -> genre.trim() } }.toSet()
@@ -558,6 +635,8 @@ actual class LocalSource(
         val filters = try {
             mutableListOf<Filter<*>>(
                 OrderBy.Popular(context),
+                LoadRandomMangaPage(context),
+                Separator(),
                 GenreGroup(context, genres.map { GenreFilter(it) }),
                 AuthorGroup(context, authors.map { AuthorFilter(it) }),
                 ArtistGroup(context, artists.map { ArtistFilter(it) }),
@@ -573,6 +652,13 @@ actual class LocalSource(
                         context.getString(R.string.unknown),
                     ).map { StatusFilter(it) },
                 ),
+                Separator(),
+                TextSearchHeader(context),
+                GenreTextSearch(context),
+                AuthorTextSearch(context),
+                ArtistTextSearch(context),
+                Separator(),
+                LocalSourceInfoHeader(context),
             )
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)

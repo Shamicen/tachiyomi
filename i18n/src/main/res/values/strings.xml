@@ -640,6 +640,9 @@
     <string name="local_filter_authors">Authors</string>
     <string name="local_filter_artists">Artists</string>
     <string name="local_filter_status">Status</string>
+    <string name="local_filter_random_page">Load random manga page (ignores all filters)</string>
+    <string name="local_filter_text_search_header">Values separated by ,\nuse - before a value to filter it out</string>
+    <string name="local_filter_info_header">⚠️ Please use \"Reset\" to update your filters\n\nⓘ Filtering only works for manga that have already loaded\n\nⓘ \"Order by\" will only become available once all your manga have loaded\n\n⚠️ Adding manga to Local Source requires an app restart</string>
     <string name="date">Date</string>
     <plurals name="day">
         <item quantity="one">1 day</item>
