@@ -7,7 +7,6 @@ import nl.adaptivity.xmlutil.serialization.XmlSerialName
 import nl.adaptivity.xmlutil.serialization.XmlValue
 
 const val COMIC_INFO_FILE = "ComicInfo.xml"
-private const val CATAGORY_SYMBOL = "\uD83D\uDD30"
 
 fun SManga.copyFromComicInfo(comicInfo: ComicInfo) {
     comicInfo.series?.let { title = it.value }
@@ -17,14 +16,8 @@ fun SManga.copyFromComicInfo(comicInfo: ComicInfo) {
     listOfNotNull(
         comicInfo.genre?.value,
         comicInfo.tags?.value,
+        comicInfo.categories?.value,
     )
-        .flatMap { it.split(", ") }
-        .plus(
-            listOfNotNull(comicInfo.categories?.value).flatMap {
-                it.split(", ")
-                    .map { category -> "$CATAGORY_SYMBOL $category" }
-            },
-        )
         .distinct()
         .joinToString(", ") { it.trim() }
         .takeIf { it.isNotEmpty() }

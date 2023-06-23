@@ -37,7 +37,6 @@ import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import nl.adaptivity.xmlutil.serialization.XML
@@ -624,14 +623,14 @@ class Downloader(
     /**
      * Creates a ComicInfo.xml file inside the given directory.
      */
-    private fun createComicInfoFile(
+    private suspend fun createComicInfoFile(
         dir: UniFile,
         manga: Manga,
         chapter: Chapter,
         source: HttpSource,
     ) {
         val chapterUrl = source.getChapterUrl(chapter.toSChapter())
-        val categories = runBlocking { getCategories.await(manga.id) }.map { it.name.trim() }.takeUnless { it.isEmpty() }
+        val categories = getCategories.await(manga.id).map { it.name.trim() }.takeUnless { it.isEmpty() }
         val comicInfo = getComicInfo(manga, chapter, chapterUrl, categories)
         // Remove the old file
         dir.findFile(COMIC_INFO_FILE)?.delete()
