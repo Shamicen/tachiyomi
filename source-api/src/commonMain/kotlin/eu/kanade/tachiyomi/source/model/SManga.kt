@@ -74,19 +74,6 @@ interface SManga : Serializable {
         it.initialized = initialized
     }
 
-    fun getStatusString(): String {
-        return when (this.status) {
-            UNKNOWN -> "Unknown"
-            ONGOING -> "Ongoing"
-            COMPLETED -> "Completed"
-            LICENSED -> "Licensed"
-            PUBLISHING_FINISHED -> "Publishing finished"
-            CANCELLED -> "Cancelled"
-            ON_HIATUS -> "On hiatus"
-            else -> throw IllegalStateException("Status must have a value between 0 and 6")
-        }
-    }
-
     companion object {
         const val UNKNOWN = 0
         const val ONGOING = 1
